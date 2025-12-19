@@ -10,6 +10,7 @@ from scipy import constants as const
 import matplotlib.animation as animation
 from IPython.display import HTML
 
+from collections import defaultdict
     
 from jaxsp.constants import h, om, hbar, Msun, GN, c, m22
 
@@ -19,6 +20,10 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 from scipy.interpolate import interp1d
+
+from scipy.special import sph_harm
+
+import s2fft
 
 m22 = 1
 u = jsp.set_schroedinger_units(m22)
@@ -75,6 +80,7 @@ def Obtain_pot(rmin, rmax, rho_psi_vals, r):
     V = -G * I
 
     return -V
+
 
 def Enclosed_mass(r, rho):
 
@@ -137,10 +143,14 @@ def Time_step_t_indep(r_pos, v, dt, acc_mag, velocities, avg_r, i):
 
     vel_disp_r = np.std(velocities_arr[:,0])
 
-    vel_disp = vel_disp_r
+    vel_disp_theta = np.std(velocities_arr[:,1])    
 
+    vel_disp_phi = np.std(velocities_arr[:,2])
+
+    vel_disp = (vel_disp_r**2 + vel_disp_theta**2 + vel_disp_phi**2)**0.5
 
     return r_pos, v, vel_disp, avg_r_new, r_mag, velocities
+
 
 def Time_step_t_indep_leapfrog(r_pos, v, dt, acc_mag, velocities, avg_r, i):
 
@@ -167,11 +177,10 @@ def Time_step_t_indep_leapfrog(r_pos, v, dt, acc_mag, velocities, avg_r, i):
 
     velocities_arr = np.array(velocities)
 
-    vel_disp_r = np.std(velocities_arr[:,0])
-
-    vel_disp = vel_disp_r
+    vel_disp = (np.std(velocities_arr[:,0])**2 + np.std(velocities_arr[:,1])**2 + np.std(velocities_arr[:,2])**2)**0.5
 
     return r_pos, v, vel_disp, avg_r_new, r_mag, velocities
+
 
 def Time_step_t_indep_Hanno_reins(r_pos, v, dt, acc_mag, velocities, avg_r, i):
     import numpy as np
@@ -222,11 +231,9 @@ def Time_step_t_indep_Hanno_reins(r_pos, v, dt, acc_mag, velocities, avg_r, i):
     velocities.append(v_sph)
     velocities_arr = np.array(velocities)
 
-    vel_disp_r = np.std(velocities_arr[:, 0])
-    vel_disp   = vel_disp_r
+    vel_disp = (np.std(velocities_arr[:, 0])**2 + np.std(velocities_arr[:, 1])**2 + np.std(velocities_arr[:, 2])**2)**0.5
 
     return r_pos, v, vel_disp, avg_r_new, r_mag, velocities
-
 
 
 def Make_animation_t_indep(r_orbit, init_pos, init_vel, dt, num_steps, acc_mag):
@@ -238,8 +245,8 @@ def Make_animation_t_indep(r_orbit, init_pos, init_vel, dt, num_steps, acc_mag):
     fig, ax = plt.subplots() 
 
     ax.add_patch(orbit)
-    ax.set_xlim(-10 , 10)
-    ax.set_ylim(-10 , 10)
+    ax.set_xlim(-0.5 , 0.5)
+    ax.set_ylim(-0.5 , 0.5)
 
     ax.set_aspect('equal', adjustable='box')
 
@@ -317,8 +324,8 @@ def Make_animation_t_dep(r_orbit, init_pos, init_vel, dt, num_steps, acc_mag_ini
     avg_radial_pos = plt.Circle((0, 0), avg_r * u.to_Kpc, color='orange', fill=False, linestyle='-.', label='Approximate Average Radius of Orbit')
     ax.add_patch(avg_radial_pos)
 
-    ax.set_xlim(-10 , 10)
-    ax.set_ylim(-10 , 10)
+    ax.set_xlim(-0.5 , 0.5)
+    ax.set_ylim(-0.5 , 0.5)
 
     ax.set_aspect('equal', adjustable='box')
 
@@ -407,9 +414,7 @@ def Simulate_time_dep(r_orbit, init_pos, dt, num_steps, r, eigen_energies, l, ra
 
         velocities_arr = np.array(velocities)
 
-        vel_disp_r = np.std(velocities_arr[:,0])
-
-        vel_disp = vel_disp_r
+        vel_disp = (np.std(velocities_arr[:,0])**2 + np.std(velocities_arr[:,1])**2 + np.std(velocities_arr[:,2])**2)**0.5
 
         return r_pos, v, acc_mag, r_mag, avg_r_new, vel_disp
 
@@ -439,6 +444,7 @@ def Find_acc_mag_from_Phi(r, Phi_psi, r_orbit):
 
     return acc_mag
 
+
 def Find_acc_mag_from_rho(r, rho_psi, r_orbit):
 
     G = GN.value * (u.from_cm**3) / (u.from_g * u.from_s**2)
@@ -452,3 +458,239 @@ def Find_acc_mag_from_rho(r, rho_psi, r_orbit):
     acc_mag = G * M_enc_at_orbit / r_orbit**2
 
     return acc_mag
+
+def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval_library):
+
+    Nr = r.shape[0]
+
+    eigen_energies = eigenstate_lib.radial_eigenmode_params.E  # shape (Nj,)
+    l = eigenstate_lib.radial_eigenmode_params.l               # shape (Nj,)
+    l = jnp.asarray(l, dtype=int)
+    n = eigenstate_lib.radial_eigenmode_params.n               # shape (Nj,)
+    #print(l)
+    #print(n)
+    Nj = l.shape[0]
+
+
+    aj_2 = wavefunction_params.aj_2        # shape (Nj,)
+    total_mass = wavefunction_params.total_mass
+
+
+    rand_phase = jax.random.uniform(jax.random.PRNGKey(0), shape=aj_2.shape, minval=0.0, maxval=2 * jnp.pi,)
+    aj = jnp.sqrt(aj_2) * jnp.exp(1j * rand_phase)  # shape (Nj,)
+
+
+    R_j_r = eval_library(r, eigenstate_lib.radial_eigenmode_params)  # (Nr, Nj)
+    radial_eigen_functions = R_j_r
+
+    radial_eigen_function_time_stepped = (radial_eigen_functions * jnp.exp(-1j * dt * eigen_energies / hbar.value))  # (Nr, Nj)
+
+
+    lm_l = []      # list of l for each mode k
+    lm_m = []      # list of m for each mode k
+    parent_j = []  # which radial eigenstate j this (l,m) mode comes from
+
+    for j_idx, ell in enumerate(l.tolist()):
+        for m in range(-ell, ell + 1):
+            lm_l.append(ell)
+            lm_m.append(m)
+            parent_j.append(j_idx)
+
+    Nmodes = len(lm_l)
+    lm_l = np.array(lm_l, dtype=int)
+    lm_m = np.array(lm_m, dtype=int)
+    parent_j = np.array(parent_j, dtype=int)
+
+    aj_modes = aj[parent_j]                             # (Nmodes,)
+    R_modes = radial_eigen_function_time_stepped[:, parent_j]  # (Nr, Nmodes)
+
+
+    # Band-limit (you can choose something slightly larger if you want margin)
+    L = int(l.max()) + 1
+
+    # McEwen–Wiaux–style equiangular grid
+    n_theta = L
+    n_phi   = 2 * L - 1
+
+    # Generate theta values
+    i = np.arange(n_theta)
+    theta = (np.pi * (2 * i + 1)) / (2 * L - 1)
+        
+    # Generate phi values
+    j = np.arange(n_phi)
+    phi = (2 * np.pi * j) / (2 * L - 1)           
+
+    Theta, Phi = jnp.meshgrid(theta, phi, indexing="ij")  # both (n_theta, n_phi)
+
+
+
+    Y_list = []
+    for ell, m in zip(lm_l, lm_m):
+        Y_lm_mode = sph_harm(m, ell, Phi, Theta)  # (n_theta, n_phi), complex
+        Y_list.append(Y_lm_mode)
+
+    Y_lm = jnp.stack(Y_list, axis=0)  # (Nmodes, n_theta, n_phi), complex
+
+
+
+    # Broadcast to (Nr, Nmodes, n_theta, n_phi)
+    aj_b = aj_modes[None, :, None, None]      # (1, Nmodes, 1, 1)
+    R_b  = R_modes[:, :, None, None]          # (Nr, Nmodes, 1, 1)
+    Y_b  = Y_lm[None, :, :, :]                # (1, Nmodes, n_theta, n_phi)
+
+    # R_b captures the time dependence part
+
+    full_psi_rtp = jnp.sum(aj_b * R_b * Y_b, axis=1)  # (Nr, n_theta, n_phi)
+
+    psi_abs2 = jnp.abs(full_psi_rtp) ** 2         # (Nr, n_theta, n_phi)
+    rho_rtp  = total_mass * psi_abs2              # (Nr, n_theta, n_phi)
+
+    # Quadrature weights on the MW equiangular grid
+    dtheta = 2 * jnp.pi / n_phi
+    dphi   = 2 * jnp.pi / n_phi
+
+    w_theta = jnp.sin(theta) * dtheta            # (n_theta,)
+    w_phi   = jnp.ones_like(phi) * dphi          # (n_phi,)
+
+    w = w_theta[:, None] * w_phi[None, :]  # (n_theta, n_phi)
+    w = w[None, :, :]
+
+    norm = w.sum()                      # ≈ 4π
+
+    # Angle-averaged radial profile ρ_ψ(r)
+    # Contract over (θ, φ) with weights, then normalise.
+    rho_psi_time_stepped = jnp.sum(rho_rtp * w, axis=(1, 2)) / norm  # (Nr,)
+
+    return rho_rtp, rho_psi_time_stepped, radial_eigen_functions, radial_eigen_function_time_stepped, theta, phi, dtheta, dphi
+
+
+
+
+
+def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
+
+    L = int(l.max()) + 1 # = 24
+
+
+    flm_r = []  # list to hold the spherical harmonic coefficients at each r
+
+    for i in range(len(r)):
+
+        #For each r bin we take the theta and phi variation on the shell, f
+        f = rho_rtp[i, :, :]  # shape (n_theta, n_phi)
+
+        #Compute the SHT - get 24 coefficients that span the l,m space for that radius r
+        flm = s2fft.forward(f, L, sampling='mw')  # shape (l, m) with l in [0, L-1] and m in [-l, l]
+
+        flm_r.append(flm)
+
+
+    flm_r = jnp.stack(flm_r, axis=0)  # shape (r, l, m)
+    print(flm_r.shape)
+
+    #Perform integrals
+
+    # Remember |m| must be less than or equal to l for the rho_lm to be non zero
+
+    l_vals = np.arange(0, L)  # l values from 0 to L-1
+
+    total_phi = defaultdict(list)
+
+    G = GN.value * (u.from_cm**3) / (u.from_g * u.from_s**2)
+
+    for l_val in l_vals:
+
+        prefix = - 4 * np.pi * G/(2*l_val + 1)
+
+        m_vals = np.arange(-l_val, l_val + 1)
+
+        for m in m_vals:
+
+            print('(l, m) = '+ '(' + str(l_val) + ', ' + str(m) + ')')
+
+            m_ind = m + L - 1 # index in the flm array corresponding to this m value
+
+            f_at_lm = flm_r[:, l_val, m_ind]  # shape (r,) for this (l,m) value - rho_lm for a certain l,m as a function of r
+
+            integrand_ext = r**(1-l_val) * f_at_lm
+            integrand_int = r**(l_val + 2) * f_at_lm
+
+            integrand_ext_rev = integrand_ext[::-1]
+            r_rev = r[::-1]
+
+            integral_ext_rev = np.zeros_like(r, dtype=complex)  # integral from r_max downwards
+
+            integral_int = np.zeros_like(r, dtype=complex)  # integral from 0 to r
+            
+            for k in range(1, len(r)):
+                dr_rev = r_rev[k] - r_rev[k - 1]
+                integral_ext_rev[k] = integral_ext_rev[k - 1] + 0.5 * (integrand_ext_rev[k] + integrand_ext_rev[k - 1]) * dr_rev
+
+                dr = r[k] - r[k - 1]
+                integral_int[k] = integral_int[k - 1] + 0.5 * (integrand_int[k] + integrand_int[k - 1]) * dr
+
+            integral_ext = integral_ext_rev[::-1] #integral from r to r_max
+
+            total_phi_lm = prefix * (r**(-(l_val + 1)) * integral_int + r**l_val * integral_ext)
+            total_phi[(l_val, m)].append(total_phi_lm)
+
+    
+    # In total_phi, for each l,m there are 1000 values corresponding to r = r_min to r_max
+
+    # We actually want them in the first form with r as the first index and then l, m
+
+    phi_rlm = np.zeros_like(flm_r, dtype=complex) 
+
+    for i in range(len(r)):
+        
+        for l_val in l_vals:
+
+            for m in range(-23, 24):
+
+                m_ind = m + L - 1 # index in the flm array corresponding to this m value
+
+                if abs(m) <= l_val:
+
+                    phi_rlm[i, l_val, m_ind] = total_phi[(l_val, m)][0][i]
+                    #print('For (l, m) = '+ str(l_val) + ',' + str(m) + ' its ' + str(total_phi[(l_val, m)][0][i]))
+                
+                else:
+
+                    phi_rlm[i, l_val, m_ind] = 0.0 + 0.0j
+
+    print(phi_rlm.shape)
+
+    L = int(l.max()) + 1 # = 24
+
+    Phi_r = []
+
+    for i in range(len(r)):
+
+        flm = phi_rlm[i, :, :]  # shape (l, m) for this r
+
+        #Compute the inverse SHT - get back to f
+
+        f = s2fft.inverse(flm, L, sampling = 'mw')  # shape (n_theta, n_phi)
+
+        Phi_r.append(f)
+
+    Phi_rtp = jnp.stack(Phi_r, axis=0)  # shape (r, n_theta, n_phi)
+    print(Phi_rtp.shape)
+
+    # Quadrature weights on the MW equiangular grid
+    w_theta = jnp.sin(theta) * dtheta  # (n_theta,)
+    w_phi = jnp.ones_like(phi) * dphi      # (n_phi,)
+
+    w = w_theta[:, None] * w_phi[None, :]  # (n_theta, n_phi)
+    w = w[None, :, :]
+
+    norm = w.sum()                  # ≈ 4π
+    print(norm)
+
+    # Angle-averaged radial profile Φ(r)
+    Phi_r_dt = jnp.sum(Phi_rtp * w, axis=(1, 2)) / norm  # (Nr,)
+
+    return Phi_rtp, Phi_r_dt, total_phi
+
+
+
