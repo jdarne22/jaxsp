@@ -523,7 +523,6 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
     Theta, Phi = jnp.meshgrid(theta, phi, indexing="ij")  # both (n_theta, n_phi)
 
 
-
     Y_list = []
     for ell, m in zip(lm_l, lm_m):
         Y_lm_mode = sph_harm(m, ell, Phi, Theta)  # (n_theta, n_phi), complex
@@ -563,10 +562,6 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
 
     return rho_rtp, rho_psi_time_stepped, radial_eigen_functions, radial_eigen_function_time_stepped, theta, phi, dtheta, dphi
 
-
-
-
-
 def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
 
     L = int(l.max()) + 1 # = 24
@@ -585,8 +580,7 @@ def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
         flm_r.append(flm)
 
 
-    flm_r = jnp.stack(flm_r, axis=0)  # shape (r, l, m)
-    print(flm_r.shape)
+    flm_r = jnp.stack(flm_r, axis=0)  # (r, l, m) but shape (r, l, 2*L-1) therefore m = 0 corresponds to position L or index L-1
 
     #Perform integrals
 
@@ -606,11 +600,18 @@ def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
 
         for m in m_vals:
 
-            print('(l, m) = '+ '(' + str(l_val) + ', ' + str(m) + ')')
-
             m_ind = m + L - 1 # index in the flm array corresponding to this m value
 
             f_at_lm = flm_r[:, l_val, m_ind]  # shape (r,) for this (l,m) value - rho_lm for a certain l,m as a function of r
+
+            if abs(f_at_lm).all() == 0:
+                print('Skipping as all zero')
+                total_phi[(l_val, m)].append(np.zeros_like(r, dtype=complex))
+                continue
+                
+            else:
+
+                print('(l, m) = '+ '(' + str(l_val) + ', ' + str(m) + ')')
 
             integrand_ext = r**(1-l_val) * f_at_lm
             integrand_int = r**(l_val + 2) * f_at_lm
@@ -629,36 +630,41 @@ def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
                 dr = r[k] - r[k - 1]
                 integral_int[k] = integral_int[k - 1] + 0.5 * (integrand_int[k] + integrand_int[k - 1]) * dr
 
-            integral_ext = integral_ext_rev[::-1] #integral from r to r_max
+            integral_ext = -integral_ext_rev[::-1] #integral from r to r_max. DONT FORGET TO MINUS TO FLIP THE INTEGRATION LIMITS!!!!
 
             total_phi_lm = prefix * (r**(-(l_val + 1)) * integral_int + r**l_val * integral_ext)
             total_phi[(l_val, m)].append(total_phi_lm)
-
     
     # In total_phi, for each l,m there are 1000 values corresponding to r = r_min to r_max
 
     # We actually want them in the first form with r as the first index and then l, m
 
-    phi_rlm = np.zeros_like(flm_r, dtype=complex) 
+    phi_rlm = []
+
 
     for i in range(len(r)):
+
+        phi_lm = np.zeros_like(flm_r[0, :, :], dtype=complex)  # shape (l, m) for this r
         
         for l_val in l_vals:
 
-            for m in range(-23, 24):
+            for m in range(-l.max(), l.max() + 1):
 
                 m_ind = m + L - 1 # index in the flm array corresponding to this m value
 
                 if abs(m) <= l_val:
 
-                    phi_rlm[i, l_val, m_ind] = total_phi[(l_val, m)][0][i]
+                    phi_lm[l_val, m_ind] = total_phi[(l_val, m)][0][i]
                     #print('For (l, m) = '+ str(l_val) + ',' + str(m) + ' its ' + str(total_phi[(l_val, m)][0][i]))
                 
                 else:
 
-                    phi_rlm[i, l_val, m_ind] = 0.0 + 0.0j
+                    phi_lm[l_val, m_ind] = 0.0 + 0.0j
+        
+        phi_rlm.append(phi_lm)
+    
+    phi_rlm = np.stack(phi_rlm, axis=0)  # (r, l, m) but shape (r, l, 2*L-1) therefore m = 0 corresponds to position L or index L-1
 
-    print(phi_rlm.shape)
 
     L = int(l.max()) + 1 # = 24
 
@@ -685,7 +691,6 @@ def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
     w = w[None, :, :]
 
     norm = w.sum()                  # ≈ 4π
-    print(norm)
 
     # Angle-averaged radial profile Φ(r)
     Phi_r_dt = jnp.sum(Phi_rtp * w, axis=(1, 2)) / norm  # (Nr,)
@@ -693,4 +698,207 @@ def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
     return Phi_rtp, Phi_r_dt, total_phi
 
 
+
+def Calculating_Phi_from_rho_in_3d_Unit_Test(l, rho_rtp, r, dtheta, dphi, theta, phi):
+
+    L = int(l.max()) + 1 # = 24
+
+
+    flm_r = []  # list to hold the spherical harmonic coefficients at each r
+
+    for i in range(len(r)):
+
+        #For each r bin we take the theta and phi variation on the shell, f
+        f = rho_rtp[i, :, :]  # shape (n_theta, n_phi)
+
+        #Compute the SHT - get 24 coefficients that span the l,m space for that radius r
+        flm = s2fft.forward(f, L, sampling='mw')  # shape (l, m) with l in [0, L-1] and m in [-l, l]
+
+        flm_r.append(flm)
+
+
+    flm_r = jnp.stack(flm_r, axis=0)  # (r, l, m) but shape (r, l, 2*L-1) therefore m = 0 corresponds to position L or index L-1
+    print(flm_r.shape)
+
+    f00_r = flm_r[:, 0, L - 1]  # shape (r,) - the l=0, m=0 coeff at each r
+    f1n1_r = flm_r[:, 1, L - 2]  # shape (r,) - the l=1, m=-1 coeff at each r
+    f11_r = flm_r[:, 1, L]      # shape (r,) - the l=1, m=1 coeff at each r
+
+    fig = plt.figure(figsize = (8,6))
+    plt.plot(r , f00_r, label='f_00', alpha = 0.6)
+    plt.plot(r , f1n1_r, label='f_1-1', alpha = 0.6)
+    plt.plot(r , -f11_r, label='- f_11', alpha = 0.6)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel('r')
+    plt.ylabel('Spherical Harmonic Coefficients of rho')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    log_f00_r = np.log10(f00_r)
+    log_f11_r = np.log10(-f11_r)
+    log_f1n1_r = np.log10(f1n1_r)
+
+    slope_00, intercept_00 = np.polyfit(np.log10(r), log_f00_r, 1)
+
+    slope_11, intercept_11 = np.polyfit(np.log10(r), log_f11_r, 1)
+
+    slope_1n1, intercept_1n1 = np.polyfit(np.log10(r), log_f1n1_r, 1)
+
+    print('Slope and intercept of log-log plot of f_00 vs r: ', slope_00, intercept_00)
+    print('Slope and intercept of log-log plot of f_11 vs r: ', slope_11, intercept_11)
+    print('Slope and intercept of log-log plot of f_1-1 vs r: ', slope_1n1, intercept_1n1)
+
+    #Perform integrals
+
+    # Remember |m| must be less than or equal to l for the rho_lm to be non zero
+
+    l_vals = np.arange(0, L)  # l values from 0 to L-1
+
+    total_phi = defaultdict(list)
+
+    G = GN.value * (u.from_cm**3) / (u.from_g * u.from_s**2)
+
+    for l_val in l_vals:
+
+        prefix = - 4 * np.pi * G/(2*l_val + 1)
+
+        m_vals = np.arange(-l_val, l_val + 1)
+
+        for m in m_vals:
+
+            m_ind = m + L - 1 # index in the flm array corresponding to this m value
+
+            f_at_lm = flm_r[:, l_val, m_ind]  # shape (r,) for this (l,m) value - rho_lm for a certain l,m as a function of r
+
+            if abs(f_at_lm).all() == 0:
+                print('Skipping as all zero')
+                total_phi[(l_val, m)].append(np.zeros_like(r, dtype=complex))
+                continue
+
+            elif l_val > 1:
+                print('Skipping as l > 1')
+                total_phi[(l_val, m)].append(np.zeros_like(r, dtype=complex))
+                continue
+                
+            else:
+
+                print('(l, m) = '+ '(' + str(l_val) + ', ' + str(m) + ')')
+
+            integrand_ext = r**(1-l_val) * f_at_lm
+            integrand_int = r**(l_val + 2) * f_at_lm
+
+            integrand_ext_rev = integrand_ext[::-1]
+            r_rev = r[::-1]
+
+            integral_ext_rev = np.zeros_like(r, dtype=complex)  # integral from r_max downwards
+
+            integral_int = np.zeros_like(r, dtype=complex)  # integral from 0 to r
+            
+            for k in range(1, len(r)):
+                dr_rev = r_rev[k] - r_rev[k - 1]
+                integral_ext_rev[k] = integral_ext_rev[k - 1] + 0.5 * (integrand_ext_rev[k] + integrand_ext_rev[k - 1]) * dr_rev
+
+                dr = r[k] - r[k - 1]
+                integral_int[k] = integral_int[k - 1] + 0.5 * (integrand_int[k] + integrand_int[k - 1]) * dr
+
+            integral_ext = -integral_ext_rev[::-1] #integral from r to r_max. DONT FORGET TO MINUS TO FLIP THE INTEGRATION LIMITS!!!!
+
+            total_phi_lm = prefix * (r**(-(l_val + 1)) * integral_int + r**l_val * integral_ext)
+            total_phi[(l_val, m)].append(total_phi_lm)
+    
+    # In total_phi, for each l,m there are 1000 values corresponding to r = r_min to r_max
+
+    # We actually want them in the first form with r as the first index and then l, m
+
+    phi_rlm = []
+
+
+    for i in range(len(r)):
+
+        phi_lm = np.zeros_like(flm_r[0, :, :], dtype=complex)  # shape (l, m) for this r
+        
+        for l_val in l_vals:
+
+            for m in range(-l.max(), l.max() + 1):
+
+                m_ind = m + L - 1 # index in the flm array corresponding to this m value
+
+                if abs(m) <= l_val:
+
+                    phi_lm[l_val, m_ind] = total_phi[(l_val, m)][0][i]
+                    #print('For (l, m) = '+ str(l_val) + ',' + str(m) + ' its ' + str(total_phi[(l_val, m)][0][i]))
+                
+                else:
+
+                    phi_lm[l_val, m_ind] = 0.0 + 0.0j
+        
+        phi_rlm.append(phi_lm)
+    
+    phi_rlm = np.stack(phi_rlm, axis=0)  # (r, l, m) but shape (r, l, 2*L-1) therefore m = 0 corresponds to position L or index L-1
+
+    print(phi_rlm.shape)
+
+    phi_00_r = phi_rlm[:, 0, L - 1]  # shape (r,) - the l=0, m=0 coeff at each r
+    phi_1n1_r = phi_rlm[:, 1, L - 2]  # shape (r,) - the l=1, m=-1 coeff at each r
+    phi_11_r = phi_rlm[:, 1, L]      # shape (r,) - the l=1, m=1 coeff at each r
+
+    fig = plt.figure(figsize = (8,6))
+    r_min = r[0]
+    r_max = r[-1]
+
+
+    phi_00_r_func = -(4*np.pi)**(3/2)*G*(r_max - 1/2 * r - 1/2 * r_min**2/r)
+
+    phi_1n1_func = -4*np.pi*G/3 * np.sqrt(2*np.pi/3) * (r*np.log(r_max/r) + 1/3 * r - 1/3*r_min**3/r**2)
+
+    phi_11_func = -phi_1n1_func
+
+
+    plt.plot(r , phi_00_r, label='phi_00', alpha = 0.6)
+    plt.plot(r , phi_1n1_r, label='phi_1-1', alpha = 0.6)
+    plt.plot(r , phi_11_r, label='phi_11', alpha = 0.6)
+
+    plt.plot(r , phi_00_r_func, '--', label='Analytic phi_00', alpha = 0.6)
+    plt.plot(r , phi_1n1_func, '--', label='Analytic phi_1-1', alpha = 0.6)
+    plt.plot(r , phi_11_func, '--', label='Analytic phi_11', alpha = 0.6)
+
+    plt.xlabel('r')
+    plt.ylabel('Spherical Harmonic Coefficients of Phi')
+    plt.grid()
+    plt.legend()
+    plt.show()
+
+
+    L = int(l.max()) + 1 # = 24
+
+    Phi_r = []
+
+    for i in range(len(r)):
+
+        flm = phi_rlm[i, :, :]  # shape (l, m) for this r
+
+        #Compute the inverse SHT - get back to f
+
+        f = s2fft.inverse(flm, L, sampling = 'mw')  # shape (n_theta, n_phi)
+
+        Phi_r.append(f)
+
+    Phi_rtp = jnp.stack(Phi_r, axis=0)  # shape (r, n_theta, n_phi)
+    print(Phi_rtp.shape)
+
+    # Quadrature weights on the MW equiangular grid
+    w_theta = jnp.sin(theta) * dtheta  # (n_theta,)
+    w_phi = jnp.ones_like(phi) * dphi      # (n_phi,)
+
+    w = w_theta[:, None] * w_phi[None, :]  # (n_theta, n_phi)
+    w = w[None, :, :]
+
+    norm = w.sum()                  # ≈ 4π
+
+    # Angle-averaged radial profile Φ(r)
+    Phi_r_dt = jnp.sum(Phi_rtp * w, axis=(1, 2)) / norm  # (Nr,)
+
+    return Phi_rtp, Phi_r_dt, total_phi
 
