@@ -16,7 +16,6 @@ from jaxsp.constants import h, om, hbar, Msun, GN, c, m22
 
 import matplotlib.pyplot as plt
 
-
 import matplotlib
 
 from scipy.interpolate import interp1d
@@ -52,7 +51,7 @@ def Obtain_pot(rmin, rmax, rho_psi_vals, r):
 
         for i in range(1, len(r)):
             #M_enc[i] = M_core + np.trapz(integrand[:i+1], r[:i+1])
-            M_enc[i] = np.trapz(integrand[:i+1], r[:i+1])
+            M_enc[i] = np.trapezoid(integrand[:i+1], r[:i+1])
 
         return M_enc
 
@@ -74,12 +73,12 @@ def Obtain_pot(rmin, rmax, rho_psi_vals, r):
         I_rev[k] = I_rev[k - 1] + 0.5 * (h_rev[k] + h_rev[k - 1]) * dr
 
     # flip back: I[i] ≈ ∫_{r_i}^{r_max} M(s)/s^2 ds
-    I = I_rev[::-1]
+    I = -I_rev[::-1]
 
     # base potential with V(r_max) = 0
     V = -G * I
 
-    return -V
+    return V
 
 
 def Enclosed_mass(r, rho):
@@ -98,7 +97,7 @@ def Enclosed_mass(r, rho):
 
     for i in range(1, len(r)):
         #M_enc[i] = M_core + np.trapz(integrand[:i+1], r[:i+1])
-        M_enc[i] = np.trapz(integrand[:i+1], r[:i+1])
+        M_enc[i] = np.trapezoid(integrand[:i+1], r[:i+1])
 
     return M_enc
 
@@ -459,6 +458,7 @@ def Find_acc_mag_from_rho(r, rho_psi, r_orbit):
 
     return acc_mag
 
+
 def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval_library):
 
     Nr = r.shape[0]
@@ -562,6 +562,7 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
 
     return rho_rtp, rho_psi_time_stepped, radial_eigen_functions, radial_eigen_function_time_stepped, theta, phi, dtheta, dphi
 
+
 def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
 
     L = int(l.max()) + 1 # = 24
@@ -575,7 +576,7 @@ def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
         f = rho_rtp[i, :, :]  # shape (n_theta, n_phi)
 
         #Compute the SHT - get 24 coefficients that span the l,m space for that radius r
-        flm = s2fft.forward(f, L, sampling='mw')  # shape (l, m) with l in [0, L-1] and m in [-l, l]
+        flm = s2fft.forward(f, L, sampling='mw', method='jax')  # shape (l, m) with l in [0, L-1] and m in [-l, l]
 
         flm_r.append(flm)
 
@@ -676,12 +677,11 @@ def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
 
         #Compute the inverse SHT - get back to f
 
-        f = s2fft.inverse(flm, L, sampling = 'mw')  # shape (n_theta, n_phi)
+        f = s2fft.inverse(flm, L, sampling = 'mw', method='jax')  # shape (n_theta, n_phi)
 
         Phi_r.append(f)
 
     Phi_rtp = jnp.stack(Phi_r, axis=0)  # shape (r, n_theta, n_phi)
-    print(Phi_rtp.shape)
 
     # Quadrature weights on the MW equiangular grid
     w_theta = jnp.sin(theta) * dtheta  # (n_theta,)
@@ -696,7 +696,6 @@ def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
     Phi_r_dt = jnp.sum(Phi_rtp * w, axis=(1, 2)) / norm  # (Nr,)
 
     return Phi_rtp, Phi_r_dt, total_phi
-
 
 
 def Calculating_Phi_from_rho_in_3d_Unit_Test(l, rho_rtp, r, dtheta, dphi, theta, phi):
