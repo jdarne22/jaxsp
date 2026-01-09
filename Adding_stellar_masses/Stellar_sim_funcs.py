@@ -469,7 +469,7 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
     n = eigenstate_lib.radial_eigenmode_params.n               # shape (Nj,)
     #print(l)
     #print(n)
-    Nj = l.shape[0]
+    Nj = l.shape[0] #j encompasses both n and l into one index
 
 
     aj_2 = wavefunction_params.aj_2        # shape (Nj,)
@@ -481,6 +481,8 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
 
 
     R_j_r = eval_library(r, eigenstate_lib.radial_eigenmode_params)  # (Nr, Nj)
+    print(R_j_r.shape)
+
     radial_eigen_functions = R_j_r
 
     radial_eigen_function_time_stepped = (radial_eigen_functions * jnp.exp(-1j * dt * eigen_energies / hbar.value))  # (Nr, Nj)
@@ -496,14 +498,13 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
             lm_m.append(m)
             parent_j.append(j_idx)
 
-    Nmodes = len(lm_l)
-    lm_l = np.array(lm_l, dtype=int)
-    lm_m = np.array(lm_m, dtype=int)
-    parent_j = np.array(parent_j, dtype=int)
+    Nmodes = len(lm_l) #Nmodes is the total number of modes for each different n, l, m
+    lm_l = jnp.array(lm_l, dtype=int)
+    lm_m = jnp.array(lm_m, dtype=int)
+    parent_j = jnp.array(parent_j, dtype=int)
 
     aj_modes = aj[parent_j]                             # (Nmodes,)
     R_modes = radial_eigen_function_time_stepped[:, parent_j]  # (Nr, Nmodes)
-
 
     # Band-limit (you can choose something slightly larger if you want margin)
     L = int(l.max()) + 1
@@ -513,12 +514,12 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
     n_phi   = 2 * L - 1
 
     # Generate theta values
-    i = np.arange(n_theta)
-    theta = (np.pi * (2 * i + 1)) / (2 * L - 1)
+    i = jnp.arange(n_theta)
+    theta = (jnp.pi * (2 * i + 1)) / (2 * L - 1)
         
     # Generate phi values
-    j = np.arange(n_phi)
-    phi = (2 * np.pi * j) / (2 * L - 1)           
+    j = jnp.arange(n_phi)
+    phi = (2 * jnp.pi * j) / (2 * L - 1)           
 
     Theta, Phi = jnp.meshgrid(theta, phi, indexing="ij")  # both (n_theta, n_phi)
 
@@ -539,7 +540,8 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
 
     # R_b captures the time dependence part
 
-    full_psi_rtp = jnp.sum(aj_b * R_b * Y_b, axis=1)  # (Nr, n_theta, n_phi)
+    full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm)
+
 
     psi_abs2 = jnp.abs(full_psi_rtp) ** 2         # (Nr, n_theta, n_phi)
     rho_rtp  = total_mass * psi_abs2              # (Nr, n_theta, n_phi)
