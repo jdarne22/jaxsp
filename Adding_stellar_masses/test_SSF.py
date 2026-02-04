@@ -1,13 +1,16 @@
 import unittest
-import Stellar_sim_funcs as SSF
 
 import numpy as np
-import jaxsp as jsp
 
 import jax
 jax.config.update("jax_enable_x64", True)
+# Force JAX to use CPU if GPU memory is limited
+jax.config.update("jax_platform_name", "cpu")
 
 import jax.numpy as jnp
+
+import Stellar_sim_funcs as SSF
+import jaxsp as jsp
 
 from scipy.interpolate import interp1d
 
@@ -110,70 +113,72 @@ class TestStellarSimFuncs(unittest.TestCase):
         self.assertTrue(Mean_abs_err < 1e-6)
 
     
-    # def test_rho_to_pot_3d(self):
+    def test_rho_to_pot_3d(self):
 
-    #     m22 = 1
-    #     u = jsp.set_schroedinger_units(m22)
+        m22 = 1
+        u = jsp.set_schroedinger_units(m22)
 
-    #     G = GN.value * (u.from_cm**3) / (u.from_g * u.from_s**2)
+        G = GN.value * (u.from_cm**3) / (u.from_g * u.from_s**2)
 
-    #     l = np.array([23])
+        l = np.array([23])
 
-    #     L = int(l.max()) + 1
+        L = int(l.max()) + 1
 
-    #     # McEwen–Wiaux–style equiangular grid
-    #     n_theta = L
-    #     n_phi   = 2 * L - 1
+        # McEwen–Wiaux–style equiangular grid
+        n_theta = L
+        n_phi   = 2 * L - 1
 
-    #     # Generate theta values
-    #     i = np.arange(n_theta)
-    #     theta = (np.pi * (2 * i + 1)) / (2 * L - 1)
+        # Generate theta values
+        i = np.arange(n_theta)
+        theta = (np.pi * (2 * i + 1)) / (2 * L - 1)
 
-    #     # Generate phi values
-    #     j = np.arange(n_phi)
-    #     phi = (2 * np.pi * j) / (2 * L - 1)
+        # Generate phi values
+        j = np.arange(n_phi)
+        phi = (2 * np.pi * j) / (2 * L - 1)
 
-    #     Theta, Phi = jnp.meshgrid(theta, phi, indexing="ij")  # both (n_theta, n_phi)
+        Theta, Phi = jnp.meshgrid(theta, phi, indexing="ij")  # both (n_theta, n_phi)
 
-    #     r_min = 0.01 * u.from_Kpc
-    #     r_max = 10 * u.from_Kpc
-
-
-    #     r = np.logspace(np.log10(r_min), np.log10(r_max), 1000)
-
-    #     #Function is rho(r, theta, phi) = 1/r * (1 + sin(theta) * cos(phi))
-
-    #     # Construct ρ(r, θ, φ)
-
-    #     rho_rtp = (1 / r[:, None, None]) * (1 + jnp.sin(Theta)[None, :, :] * jnp.cos(Phi)[None, :, :])  # (Nr, n_theta, n_phi)
-
-    #     # #Compute angle-averaged radial profile
-
-    #     # Quadrature weights on the MW equiangular grid
-    #     dtheta = 2 * jnp.pi / n_phi
-    #     dphi   = 2 * jnp.pi / n_phi
-
-    #     w_theta = jnp.sin(theta) * dtheta            # (n_theta,)
-    #     w_phi   = jnp.ones_like(phi) * dphi          # (n_phi,)
-
-    #     w = w_theta[:, None] * w_phi[None, :]  # (n_theta, n_phi)
-    #     w = w[None, :, :]
-
-    #     norm = w.sum()                      # ≈ 4π
-
-    #     # Angle-averaged radial profile ρ_ψ(r)
-    #     # Contract over (θ, φ) with weights, then normalise.
-    #     rho_psi_r = jnp.sum(rho_rtp * w, axis=(1, 2)) / norm  # (Nr,)
-
-    #     Phi_rtp, Phi_r_dt, phi_lm = SSF.Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi)
+        r_min = 0.01 * u.from_Kpc
+        r_max = 10 * u.from_Kpc
 
 
-    #     Phi_r_maths = -4*np.pi*G*(r_max - 1/2*r - 1/2 * r_min**2 / r)
+        r = np.logspace(np.log10(r_min), np.log10(r_max), 1000)
 
+        #Function is rho(r, theta, phi) = 1/r * (1 + sin(theta) * cos(phi))
 
-    #     ratio = Phi_r_dt / Phi_r_maths
+        # Construct ρ(r, θ, φ)
 
-    #     self.assertTrue(np.allclose(ratio, 1.0, rtol=1e-3))
+        rho_rtp = (1 / r[:, None, None]) * (1 + jnp.sin(Theta)[None, :, :] * jnp.cos(Phi)[None, :, :])  # (Nr, n_theta, n_phi)
+
+        # #Compute angle-averaged radial profile
+
+        # Quadrature weights on the MW equiangular grid
+        dtheta = 2 * jnp.pi / n_phi
+        dphi   = 2 * jnp.pi / n_phi
+
+        w_theta = jnp.sin(theta) * dtheta            # (n_theta,)
+        w_phi   = jnp.ones_like(phi) * dphi          # (n_phi,)
+
+        w = w_theta[:, None] * w_phi[None, :]  # (n_theta, n_phi)
+        w = w[None, :, :]
+
+        norm = w.sum()                      # ≈ 4π
+
+        # Angle-averaged radial profile ρ_ψ(r)
+        # Contract over (θ, φ) with weights, then normalise.
+        rho_psi_r = jnp.sum(rho_rtp * w, axis=(1, 2)) / norm  # (Nr,)
+
+        Phi_rtp, Phi_r_dt = SSF.Calculating_Phi_from_rho_in_3d_optimized(l, rho_rtp, r, dtheta, dphi, theta, phi)
+
+        R = r[:, None, None]
+        theta = Theta[None, :, :]
+        phi = Phi[None, :, :]
+
+        Phi_rtp_maths = -4*np.pi*G*(r_max - 1/2*R - 1/2*r_min**2/R) - 4*np.pi*G/3*(R*np.log(r_max/R) + 1/3*R - 1/3*r_min**3/R**2)*np.sin(theta)*np.cos(phi)
+
+        rms_error = np.sqrt(np.mean(abs(((Phi_rtp-Phi_rtp_maths)/Phi_rtp_maths)**2)))
+
+        self.assertEqual(round(rms_error, 5), 0)
 
 
     def test_cartesian_to_sph(self):

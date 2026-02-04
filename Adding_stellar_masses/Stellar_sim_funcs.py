@@ -1,3 +1,4 @@
+
 import jax
 jax.config.update("jax_enable_x64", True)
 import numpy as np
@@ -23,6 +24,10 @@ from scipy.interpolate import interp1d
 from scipy.special import sph_harm
 
 import s2fft
+
+import time
+
+from scipy.interpolate import RegularGridInterpolator
 
 m22 = 1
 u = jsp.set_schroedinger_units(m22)
@@ -104,21 +109,32 @@ def Enclosed_mass(r, rho):
 
 def Cartesian_to_sph(x, y, z):
     r = jnp.sqrt(x**2 + y**2 + z**2)
-    theta = 0
-    phi = jnp.arctan2(y, x)
+    theta = jnp.arccos(z / r) 
+    phi = jnp.arctan2(y, x) % (2 * jnp.pi)
     return np.array([r, theta, phi])
 
 
 def Cartesian_to_sph_vel(x, y, z, vx, vy, vz):
     r = jnp.sqrt(x**2 + y**2 + z**2)
-    theta = 0
+    theta = jnp.arccos(z / r)
     phi = jnp.arctan2(y, x)
 
     vr = (x * vx + y * vy + z * vz) / r
-    vtheta = 0
+    vtheta = (z * (x * vx + y * vy) - r**2 * vz) / (r * jnp.sqrt(x**2 + y**2))
     vphi = (x * vy - y * vx) / (x**2 + y**2)**0.5
 
     return np.array([vr, vtheta, vphi])
+
+
+def acceleration_spherical_to_cartesian(a_r, a_theta, a_phi, theta, phi):
+
+    sin_t, cos_t = np.sin(theta), np.cos(theta)
+    sin_p, cos_p = np.sin(phi), np.cos(phi)
+
+    a_x = a_r * sin_t * cos_p + a_theta * cos_t * cos_p - a_phi * sin_p
+    a_y = a_r * sin_t * sin_p + a_theta * cos_t * sin_p + a_phi * cos_p
+    a_z = a_r * cos_t - a_theta * sin_t 
+    return a_x, a_y, a_z
 
 
 def Time_step_t_indep(r_pos, v, dt, acc_mag, velocities, avg_r, i):
@@ -458,6 +474,9 @@ def Find_acc_mag_from_rho(r, rho_psi, r_orbit):
 
     return acc_mag
 
+'''
+ENTERING 3D FUNCTIONS
+'''
 
 def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval_library):
 
@@ -532,15 +551,7 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
     Y_lm = jnp.stack(Y_list, axis=0)  # (Nmodes, n_theta, n_phi), complex
 
 
-
-    # Broadcast to (Nr, Nmodes, n_theta, n_phi)
-    aj_b = aj_modes[None, :, None, None]      # (1, Nmodes, 1, 1)
-    R_b  = R_modes[:, :, None, None]          # (Nr, Nmodes, 1, 1)
-    Y_b  = Y_lm[None, :, :, :]                # (1, Nmodes, n_theta, n_phi)
-
-    # R_b captures the time dependence part
-
-    full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm)
+    full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm) #Use this rather than np.sum as causes memory error due to limited vram in GPU
 
 
     psi_abs2 = jnp.abs(full_psi_rtp) ** 2         # (Nr, n_theta, n_phi)
@@ -562,344 +573,909 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
     # Contract over (θ, φ) with weights, then normalise.
     rho_psi_time_stepped = jnp.sum(rho_rtp * w, axis=(1, 2)) / norm  # (Nr,)
 
-    return rho_rtp, rho_psi_time_stepped, radial_eigen_functions, radial_eigen_function_time_stepped, theta, phi, dtheta, dphi
+    return rho_rtp, rho_psi_time_stepped, radial_eigen_functions, radial_eigen_function_time_stepped, theta, phi, dtheta, dphi, Y_lm
 
 
-def Calculating_Phi_from_rho_in_3d(l, rho_rtp, r, dtheta, dphi, theta, phi):
-
-    L = int(l.max()) + 1 # = 24
-
-
-    flm_r = []  # list to hold the spherical harmonic coefficients at each r
-
-    for i in range(len(r)):
-
-        #For each r bin we take the theta and phi variation on the shell, f
-        f = rho_rtp[i, :, :]  # shape (n_theta, n_phi)
-
-        #Compute the SHT - get 24 coefficients that span the l,m space for that radius r
-        flm = s2fft.forward(f, L, sampling='mw', method='jax')  # shape (l, m) with l in [0, L-1] and m in [-l, l]
-
-        flm_r.append(flm)
+def precompute_lm_pairs(L):
+    """Precompute (l, m) pairs for spherical harmonics - call once before simulation loop."""
+    lm_pairs = []
+    for l_val in range(L):
+        for m_val in range(-l_val, l_val + 1):
+            lm_pairs.append((l_val, m_val))
+    return jnp.array(lm_pairs)
 
 
-    flm_r = jnp.stack(flm_r, axis=0)  # (r, l, m) but shape (r, l, 2*L-1) therefore m = 0 corresponds to position L or index L-1
+def Calculating_Phi_from_rho_in_3d_optimized(l, rho_rtp, r, dtheta, dphi, theta, phi, lm_pairs, G):
 
-    #Perform integrals
+    #start = time.time()
 
-    # Remember |m| must be less than or equal to l for the rho_lm to be non zero
+    L = int(l.max()) + 1
 
-    l_vals = np.arange(0, L)  # l values from 0 to L-1
+    #Parallel forward SHT over all radii
+    def forward_sht_single_r(rho_at_r):
+        return s2fft.forward(rho_at_r, L, sampling='mw', method='jax')
 
-    total_phi = defaultdict(list)
+    flm_r = jax.vmap(forward_sht_single_r)(rho_rtp)  # (Nr, L, 2*L-1)
+
+    lm_pairs = jnp.array(lm_pairs)  # shape (N_pairs, 2)
+
+    def compute_phi_for_lm(lm_pair):
+        """Compute phi_lm for a single (l, m) pair"""
+
+        l_val = lm_pair[0]
+        m_val = lm_pair[1]
+
+        prefix = -4.0 * jnp.pi * G / (2 * l_val + 1)
+        m_ind = m_val + L - 1
+
+        f_at_lm = flm_r[:, l_val, m_ind] #(Nr)
+
+        # Integrands
+        integrand_ext = r**(1 - l_val) * f_at_lm
+        integrand_int = r**(l_val + 2) * f_at_lm
+
+        # Cumulative integration
+        dr = jnp.diff(r)
+
+        # Internal integral (from 0 to r)
+        avg_int = 0.5 * (integrand_int[1:] + integrand_int[:-1])
+        integral_int = jnp.concatenate([
+            jnp.array([0.0 + 0.0j]),
+            jnp.cumsum(avg_int * dr)
+        ])
+
+        # External integral (from r to r_max) - integrate backwards
+        integrand_ext_rev = integrand_ext[::-1]
+        r_rev = r[::-1]
+        dr_rev = jnp.diff(r_rev)
+        avg_ext = 0.5 * (integrand_ext_rev[1:] + integrand_ext_rev[:-1])
+        integral_ext_rev = jnp.concatenate([
+            jnp.array([0.0 + 0.0j]),
+            jnp.cumsum(avg_ext * dr_rev)
+        ])
+        integral_ext = -integral_ext_rev[::-1]
+
+        return prefix * (r**(-(l_val + 1)) * integral_int + r**l_val * integral_ext)
+
+    #Parallel computation over all (l, m) pairs
+    all_phi_lm = jax.vmap(compute_phi_for_lm)(lm_pairs)  # shape (N_pairs, Nr)
+
+    #Reconstruct phi_rlm array using JAX's advanced indexing
+    phi_rlm = jnp.zeros((len(r), L, 2*L-1), dtype=complex)
+
+    # Extract l and m indices for all pairs
+    l_indices = lm_pairs[:, 0].astype(int)
+    m_indices = (lm_pairs[:, 1] + L - 1).astype(int)
+
+    # Use JAX's scatter operation to fill all values at once
+    # Transpose all_phi_lm to shape (Nr, N_pairs) then scatter
+
+    # Use vectorized indexing:
+    phi_rlm = phi_rlm.at[:, l_indices, m_indices].set(all_phi_lm.T)
+
+    #Parallel inverse SHT over all radii
+    def inverse_sht_single_r(phi_lm_at_r):
+        return s2fft.inverse(phi_lm_at_r, L, sampling='mw', method='jax')
+
+    Phi_rtp = jax.vmap(inverse_sht_single_r)(phi_rlm)  # (Nr, n_theta, n_phi)
+
+    #Angle-average
+    w_theta = jnp.sin(theta) * dtheta
+    w_phi = jnp.ones_like(phi) * dphi
+    w = w_theta[:, None] * w_phi[None, :]
+    norm = w.sum()
+
+    Phi_r_dt = jnp.sum(Phi_rtp * w[None, :, :], axis=(1, 2)) / norm
+
+    #end = time.time()
+    #print("Time taken for potential calculation (s): ", end - start)
+
+    return Phi_rtp, Phi_r_dt
+
+
+def Calculating_Phi_from_rho_in_3d_optimized_at_r_orbit(l, rho_rtp, r, r_orbit, lm_pairs, G):
+
+    start = time.time()
+
+    L = int(l.max()) + 1
+
+    #Parallel forward SHT over all radii
+    def forward_sht_single_r(rho_at_r):
+        return s2fft.forward(rho_at_r, L, sampling='mw', method='jax')
+
+    flm_r = jax.vmap(forward_sht_single_r)(rho_rtp)  # (Nr, L, 2*L-1)
+
+    r_finder = jnp.abs(r - r_orbit)
+    r_index = jnp.argmin(r_finder)
+    r_vals = r[r_index - 10 : r_index + 11]  # three r values around r_orbit where we are evaluating integrals at
+
+    r_vals = jnp.array(r_vals)
+
+
+    def compute_phi_for_lm(lm_pair):
+        """Compute phi_lm for a single (l, m) pair at r = r_orbit +- small delta"""
+
+        l_val = lm_pair[0]
+        m_val = lm_pair[1]
+
+        prefix = -4.0 * jnp.pi * G / (2 * l_val + 1)
+        m_ind = m_val + L - 1
+
+        f_at_lm = flm_r[:, l_val, m_ind]  # (Nr). This is rho_lm(r)
+
+        # Integrands - compute over ALL r
+        integrand_ext = r**(1 - l_val) * f_at_lm
+        integrand_int = r**(l_val + 2) * f_at_lm
+
+        dr = jnp.diff(r)
+
+        # Internal integral (from 0 to r) - FULL computation
+        avg_int = 0.5 * (integrand_int[1:] + integrand_int[:-1])
+        integral_int = jnp.concatenate([
+            jnp.array([0.0 + 0.0j]),
+            jnp.cumsum(avg_int * dr)
+        ])
+
+        # External integral (from r to r_max) - FULL computation
+        integrand_ext_rev = integrand_ext[::-1]
+        r_rev = r[::-1]
+        dr_rev = jnp.diff(r_rev)
+        avg_ext = 0.5 * (integrand_ext_rev[1:] + integrand_ext_rev[:-1])
+        integral_ext_rev = jnp.concatenate([
+            jnp.array([0.0 + 0.0j]),
+            jnp.cumsum(avg_ext * dr_rev)
+        ])
+        integral_ext = -integral_ext_rev[::-1]
+
+        # Compute phi at ALL r, then extract only the 3 values we need
+        phi_all_r = prefix * (r**(-(l_val + 1)) * integral_int + r**l_val * integral_ext)
+
+        # Extract only at r_index-10 to r_index+10
+        return phi_all_r[r_index - 10 : r_index + 11]
+
+    #Parallel computation over all (l, m) pairs
+    all_phi_lm = jax.vmap(compute_phi_for_lm)(lm_pairs)  # shape (N_pairs, 3)
+
+    #Reconstruct phi_rlm array using JAX's advanced indexing
+    phi_rlm = jnp.zeros((len(r_vals), L, 2*L-1), dtype=complex)
+
+    # Extract l and m indices for all pairs
+    l_indices = lm_pairs[:, 0].astype(int)
+    m_indices = (lm_pairs[:, 1] + L - 1).astype(int)
+
+    # Use JAX's scatter operation to fill all values at once
+    # Transpose all_phi_lm to shape (Nr, N_pairs) then scatter
+    # Use vectorized indexing:
+    phi_rlm = phi_rlm.at[:, l_indices, m_indices].set(all_phi_lm.T)
+
+    #Parallel inverse SHT over all radii
+    def inverse_sht_single_r(phi_lm_at_r):
+        return s2fft.inverse(phi_lm_at_r, L, sampling='mw', method='jax')
+
+    Phi_rtp = jax.vmap(inverse_sht_single_r)(phi_rlm)  # (3, n_theta, n_phi)
+
+    end = time.time()
+
+    #print("Time taken for potential calculation at r_orbit (s): ", end - start)
+
+    return Phi_rtp, r_vals
+
+
+def Calculating_Phi_from_rho_in_3d_optimized_at_r_orbit_HR(l, rho_rtp, r, r_orbit, lm_pairs, G):
+
+    start = time.time()
+
+    L = int(l.max()) + 1
+
+    #Parallel forward SHT over all radii
+    def forward_sht_single_r(rho_at_r):
+        return s2fft.forward(rho_at_r, L, sampling='mw', method='jax')
+
+    flm_r = jax.vmap(forward_sht_single_r)(rho_rtp)  # (Nr, L, 2*L-1)
+
+    end = time.time()
+    print("Time taken for forward SHT (s): ", end - start)
+
+    r_finder = jnp.abs(r - r_orbit)
+    r_index = jnp.argmin(r_finder)
+    r_vals = r[r_index - 1 : r_index + 2]  # three r values around r_orbit where we are evaluating integrals at
+
+    r_vals = jnp.array(r_vals)
+
+
+    def compute_phi_for_lm(lm_pair):
+        """Compute phi_lm for a single (l, m) pair at r = r_orbit +- small delta"""
+
+        l_val = lm_pair[0]
+        m_val = lm_pair[1]
+
+        prefix = -4.0 * jnp.pi * G / (2 * l_val + 1)
+        m_ind = m_val + L - 1
+
+        f_at_lm = flm_r[:, l_val, m_ind]  # (Nr). This is rho_lm(r)
+
+        # Integrands - compute over ALL r
+        integrand_ext = r**(1 - l_val) * f_at_lm
+        integrand_int = r**(l_val + 2) * f_at_lm
+
+        dr = jnp.diff(r)
+
+        # Internal integral (from 0 to r) - FULL computation
+        avg_int = 0.5 * (integrand_int[1:] + integrand_int[:-1])
+
+        avg_int = avg_int[:r_index + 2]
+        dr = dr[:r_index + 2]
+
+        integral_int = jnp.concatenate([
+            jnp.array([0.0 + 0.0j]),
+            jnp.cumsum(avg_int * dr)
+        ])
+
+        integral_int = integral_int[r_index - 1:r_index + 2]
+
+
+        # External integral (from r to r_max) - FULL computation
+        integrand_ext_rev = integrand_ext[::-1]
+        r_rev = r[::-1]
+        dr_rev = jnp.diff(r_rev)
+        avg_ext = 0.5 * (integrand_ext_rev[1:] + integrand_ext_rev[:-1])
+
+        avg_ext = avg_ext[:len(r) - r_index + 1]
+        dr_rev = dr_rev[:len(r) - r_index + 1]
+
+        integral_ext_rev = jnp.concatenate([
+            jnp.array([0.0 + 0.0j]),
+            jnp.cumsum(avg_ext * dr_rev)
+        ])
+        integral_ext = -integral_ext_rev[::-1][:3]
+
+
+        # Compute phi at ALL r, then extract only the 3 values we need
+        phi_all_r = prefix * (r_vals**(-(l_val + 1)) * integral_int + r_vals**l_val * integral_ext)
+
+        # Extract only at r_index-1 to r_index+1
+        return phi_all_r
+
+    #Parallel computation over all (l, m) pairs
+    start = time.time()
+    all_phi_lm = jax.vmap(compute_phi_for_lm)(lm_pairs)  # shape (N_pairs, 3)
+    end = time.time()
+    print("Time taken for integration at r_orbit (s): ", end - start)
+
+    #Reconstruct phi_rlm array using JAX's advanced indexing
+    phi_rlm = jnp.zeros((len(r_vals), L, 2*L-1), dtype=complex)
+
+    # Extract l and m indices for all pairs
+    l_indices = lm_pairs[:, 0].astype(int)
+    m_indices = (lm_pairs[:, 1] + L - 1).astype(int)
+
+    # Use JAX's scatter operation to fill all values at once
+    # Transpose all_phi_lm to shape (Nr, N_pairs) then scatter
+    # Use vectorized indexing:
+    phi_rlm = phi_rlm.at[:, l_indices, m_indices].set(all_phi_lm.T)
+
+    #Parallel inverse SHT over all radii
+    start = time.time()
+    def inverse_sht_single_r(phi_lm_at_r):
+        return s2fft.inverse(phi_lm_at_r, L, sampling='mw', method='jax')
+
+
+    Phi_rtp = jax.vmap(inverse_sht_single_r)(phi_rlm)  # (3, n_theta, n_phi)
+
+    end = time.time()
+    print("Time taken for inverse SHT at r_orbit (s): ", end - start)
+
+    #print("Time taken for potential calculation at r_orbit (s): ", end - start)
+
+    return Phi_rtp, r_vals
+
+
+def convergence_rho_to_pot_3d(r_in):
+    
+
+    m22 = 1
+    u = jsp.set_schroedinger_units(m22)
 
     G = GN.value * (u.from_cm**3) / (u.from_g * u.from_s**2)
 
-    for l_val in l_vals:
+    l = np.array([23])
 
-        prefix = - 4 * np.pi * G/(2*l_val + 1)
+    L = int(l.max()) + 1
 
-        m_vals = np.arange(-l_val, l_val + 1)
+    # McEwen–Wiaux–style equiangular grid
+    n_theta = L
+    n_phi   = 2 * L - 1
 
-        for m in m_vals:
+    # Generate theta values
+    i = np.arange(n_theta)
+    theta = (np.pi * (2 * i + 1)) / (2 * L - 1)
 
-            m_ind = m + L - 1 # index in the flm array corresponding to this m value
+    # Generate phi values
+    j = np.arange(n_phi)
+    phi = (2 * np.pi * j) / (2 * L - 1)
 
-            f_at_lm = flm_r[:, l_val, m_ind]  # shape (r,) for this (l,m) value - rho_lm for a certain l,m as a function of r
+    Theta, Phi = jnp.meshgrid(theta, phi, indexing="ij")  # both (n_theta, n_phi)
 
-            if abs(f_at_lm).all() == 0:
-                print('Skipping as all zero')
-                total_phi[(l_val, m)].append(np.zeros_like(r, dtype=complex))
-                continue
-                
-            else:
+    r = np.array(r_in)
 
-                print('(l, m) = '+ '(' + str(l_val) + ', ' + str(m) + ')')
+    r_min = min(r)
+    r_max = max(r)
 
-            integrand_ext = r**(1-l_val) * f_at_lm
-            integrand_int = r**(l_val + 2) * f_at_lm
+    #Function is rho(r, theta, phi) = 1/r * (1 + sin(theta) * cos(phi))
 
-            integrand_ext_rev = integrand_ext[::-1]
-            r_rev = r[::-1]
+    # Construct ρ(r, θ, φ)
 
-            integral_ext_rev = np.zeros_like(r, dtype=complex)  # integral from r_max downwards
+    rho_rtp = jnp.einsum('r,tp->rtp', 1 / r, (1 + jnp.sin(Theta) * jnp.cos(Phi)))  # (Nr, n_theta, n_phi)
 
-            integral_int = np.zeros_like(r, dtype=complex)  # integral from 0 to r
-            
-            for k in range(1, len(r)):
-                dr_rev = r_rev[k] - r_rev[k - 1]
-                integral_ext_rev[k] = integral_ext_rev[k - 1] + 0.5 * (integrand_ext_rev[k] + integrand_ext_rev[k - 1]) * dr_rev
+    #rho_rtp = (1 / r[:, None, None]) * (1 + jnp.sin(Theta)[None, :, :] * jnp.cos(Phi)[None, :, :])  # (Nr, n_theta, n_phi)
 
-                dr = r[k] - r[k - 1]
-                integral_int[k] = integral_int[k - 1] + 0.5 * (integrand_int[k] + integrand_int[k - 1]) * dr
+    dtheta = 2 * jnp.pi / n_phi
+    dphi   = 2 * jnp.pi / n_phi
 
-            integral_ext = -integral_ext_rev[::-1] #integral from r to r_max. DONT FORGET TO MINUS TO FLIP THE INTEGRATION LIMITS!!!!
+    Phi_rtp, Phi_r_dt = Calculating_Phi_from_rho_in_3d_optimized(l, rho_rtp, r, dtheta, dphi, theta, phi)
 
-            total_phi_lm = prefix * (r**(-(l_val + 1)) * integral_int + r**l_val * integral_ext)
-            total_phi[(l_val, m)].append(total_phi_lm)
+    R = r[:, None, None]
+    theta = Theta[None, :, :]
+    phi = Phi[None, :, :]
+
+    Phi_rtp_maths = -4*np.pi*G*(r_max - 1/2*R - 1/2*r_min**2/R) - 4*np.pi*G/3*(R*np.log(r_max/R) + 1/3*R - 1/3*r_min**3/R**2)*np.sin(theta)*np.cos(phi)
     
-    # In total_phi, for each l,m there are 1000 values corresponding to r = r_min to r_max
+    Phi_r_maths = -4*np.pi*G*(r_max - 1/2*r - 1/2 * r_min**2 / r)
 
-    # We actually want them in the first form with r as the first index and then l, m
+    rms_error = np.sqrt(np.mean(abs(((Phi_rtp-Phi_rtp_maths)/Phi_rtp_maths)**2)))
 
-    phi_rlm = []
-
-
-    for i in range(len(r)):
-
-        phi_lm = np.zeros_like(flm_r[0, :, :], dtype=complex)  # shape (l, m) for this r
-        
-        for l_val in l_vals:
-
-            for m in range(-l.max(), l.max() + 1):
-
-                m_ind = m + L - 1 # index in the flm array corresponding to this m value
-
-                if abs(m) <= l_val:
-
-                    phi_lm[l_val, m_ind] = total_phi[(l_val, m)][0][i]
-                    #print('For (l, m) = '+ str(l_val) + ',' + str(m) + ' its ' + str(total_phi[(l_val, m)][0][i]))
-                
-                else:
-
-                    phi_lm[l_val, m_ind] = 0.0 + 0.0j
-        
-        phi_rlm.append(phi_lm)
+    return rms_error, Phi_r_dt, Phi_r_maths
     
-    phi_rlm = np.stack(phi_rlm, axis=0)  # (r, l, m) but shape (r, l, 2*L-1) therefore m = 0 corresponds to position L or index L-1
+
+def Acc_from_pot_3d(Phi_rtp, r, theta, phi):
 
 
-    L = int(l.max()) + 1 # = 24
+    dr = jnp.gradient(r)
+    dtheta = jnp.gradient(theta)
+    dphi = jnp.gradient(phi)
 
-    Phi_r = []
+    dPhi_dr = jnp.gradient(Phi_rtp, axis=0) / dr[:, None, None]
 
-    for i in range(len(r)):
+    dPhi_dtheta = jnp.gradient(Phi_rtp, axis=1) / dtheta[None, :, None]
 
-        flm = phi_rlm[i, :, :]  # shape (l, m) for this r
+    dPhi_dphi = jnp.gradient(Phi_rtp, axis=2) / dphi[None, None, :]
 
-        #Compute the inverse SHT - get back to f
+    r_grid = r[:, None, None]
+    theta_grid = theta[None, :, None]
 
-        f = s2fft.inverse(flm, L, sampling = 'mw', method='jax')  # shape (n_theta, n_phi)
+    acc_r = dPhi_dr
+    acc_theta = dPhi_dtheta / r_grid
+    acc_phi = dPhi_dphi / (r_grid * jnp.sin(theta_grid))
 
-        Phi_r.append(f)
+    acc_vec = -jnp.stack([acc_r, acc_theta, acc_phi])
 
-    Phi_rtp = jnp.stack(Phi_r, axis=0)  # shape (r, n_theta, n_phi)
-
-    # Quadrature weights on the MW equiangular grid
-    w_theta = jnp.sin(theta) * dtheta  # (n_theta,)
-    w_phi = jnp.ones_like(phi) * dphi      # (n_phi,)
-
-    w = w_theta[:, None] * w_phi[None, :]  # (n_theta, n_phi)
-    w = w[None, :, :]
-
-    norm = w.sum()                  # ≈ 4π
-
-    # Angle-averaged radial profile Φ(r)
-    Phi_r_dt = jnp.sum(Phi_rtp * w, axis=(1, 2)) / norm  # (Nr,)
-
-    return Phi_rtp, Phi_r_dt, total_phi
+    return acc_vec
 
 
-def Calculating_Phi_from_rho_in_3d_Unit_Test(l, rho_rtp, r, dtheta, dphi, theta, phi):
+def Simulate_time_dep_3d(r_orbit, init_pos, dt, num_steps, r, eigen_energies, l, R_j_r, aj, total_mass, Phi_psi, Y_lm):
 
-    L = int(l.max()) + 1 # = 24
+    to_kpc = jnp.array([u.to_Kpc, 1, 1])
 
-
-    flm_r = []  # list to hold the spherical harmonic coefficients at each r
-
-    for i in range(len(r)):
-
-        #For each r bin we take the theta and phi variation on the shell, f
-        f = rho_rtp[i, :, :]  # shape (n_theta, n_phi)
-
-        #Compute the SHT - get 24 coefficients that span the l,m space for that radius r
-        flm = s2fft.forward(f, L, sampling='mw')  # shape (l, m) with l in [0, L-1] and m in [-l, l]
-
-        flm_r.append(flm)
-
-
-    flm_r = jnp.stack(flm_r, axis=0)  # (r, l, m) but shape (r, l, 2*L-1) therefore m = 0 corresponds to position L or index L-1
-    print(flm_r.shape)
-
-    f00_r = flm_r[:, 0, L - 1]  # shape (r,) - the l=0, m=0 coeff at each r
-    f1n1_r = flm_r[:, 1, L - 2]  # shape (r,) - the l=1, m=-1 coeff at each r
-    f11_r = flm_r[:, 1, L]      # shape (r,) - the l=1, m=1 coeff at each r
-
-    fig = plt.figure(figsize = (8,6))
-    plt.plot(r , f00_r, label='f_00', alpha = 0.6)
-    plt.plot(r , f1n1_r, label='f_1-1', alpha = 0.6)
-    plt.plot(r , -f11_r, label='- f_11', alpha = 0.6)
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.xlabel('r')
-    plt.ylabel('Spherical Harmonic Coefficients of rho')
-    plt.legend()
-    plt.grid()
-    plt.show()
-
-    log_f00_r = np.log10(f00_r)
-    log_f11_r = np.log10(-f11_r)
-    log_f1n1_r = np.log10(f1n1_r)
-
-    slope_00, intercept_00 = np.polyfit(np.log10(r), log_f00_r, 1)
-
-    slope_11, intercept_11 = np.polyfit(np.log10(r), log_f11_r, 1)
-
-    slope_1n1, intercept_1n1 = np.polyfit(np.log10(r), log_f1n1_r, 1)
-
-    print('Slope and intercept of log-log plot of f_00 vs r: ', slope_00, intercept_00)
-    print('Slope and intercept of log-log plot of f_11 vs r: ', slope_11, intercept_11)
-    print('Slope and intercept of log-log plot of f_1-1 vs r: ', slope_1n1, intercept_1n1)
-
-    #Perform integrals
-
-    # Remember |m| must be less than or equal to l for the rho_lm to be non zero
-
-    l_vals = np.arange(0, L)  # l values from 0 to L-1
-
-    total_phi = defaultdict(list)
-
+    L = int(l.max()) + 1
     G = GN.value * (u.from_cm**3) / (u.from_g * u.from_s**2)
+    lm_pairs = precompute_lm_pairs(L)
 
-    for l_val in l_vals:
+    acc_mag = Find_acc_mag_from_Phi(r, Phi_psi, r_orbit)
 
-        prefix = - 4 * np.pi * G/(2*l_val + 1)
+    acc_vec = acc_mag * (-init_pos / np.linalg.norm(init_pos)) 
 
-        m_vals = np.arange(-l_val, l_val + 1)
+    init_vel = np.sqrt(acc_mag * r_orbit) * np.array([0, 1, 0]) #Circular orbit velocity
 
-        for m in m_vals:
+    init_pos_sph = Cartesian_to_sph(init_pos[0], init_pos[1], init_pos[2])
+    init_vel_sph = Cartesian_to_sph_vel(init_pos[0], init_pos[1], init_pos[2], init_vel[0], init_vel[1], init_vel[2])
 
-            m_ind = m + L - 1 # index in the flm array corresponding to this m value
-
-            f_at_lm = flm_r[:, l_val, m_ind]  # shape (r,) for this (l,m) value - rho_lm for a certain l,m as a function of r
-
-            if abs(f_at_lm).all() == 0:
-                print('Skipping as all zero')
-                total_phi[(l_val, m)].append(np.zeros_like(r, dtype=complex))
-                continue
-
-            elif l_val > 1:
-                print('Skipping as l > 1')
-                total_phi[(l_val, m)].append(np.zeros_like(r, dtype=complex))
-                continue
-                
-            else:
-
-                print('(l, m) = '+ '(' + str(l_val) + ', ' + str(m) + ')')
-
-            integrand_ext = r**(1-l_val) * f_at_lm
-            integrand_int = r**(l_val + 2) * f_at_lm
-
-            integrand_ext_rev = integrand_ext[::-1]
-            r_rev = r[::-1]
-
-            integral_ext_rev = np.zeros_like(r, dtype=complex)  # integral from r_max downwards
-
-            integral_int = np.zeros_like(r, dtype=complex)  # integral from 0 to r
-            
-            for k in range(1, len(r)):
-                dr_rev = r_rev[k] - r_rev[k - 1]
-                integral_ext_rev[k] = integral_ext_rev[k - 1] + 0.5 * (integrand_ext_rev[k] + integrand_ext_rev[k - 1]) * dr_rev
-
-                dr = r[k] - r[k - 1]
-                integral_int[k] = integral_int[k - 1] + 0.5 * (integrand_int[k] + integrand_int[k - 1]) * dr
-
-            integral_ext = -integral_ext_rev[::-1] #integral from r to r_max. DONT FORGET TO MINUS TO FLIP THE INTEGRATION LIMITS!!!!
-
-            total_phi_lm = prefix * (r**(-(l_val + 1)) * integral_int + r**l_val * integral_ext)
-            total_phi[(l_val, m)].append(total_phi_lm)
     
-    # In total_phi, for each l,m there are 1000 values corresponding to r = r_min to r_max
+    v = init_vel + acc_vec * dt
 
-    # We actually want them in the first form with r as the first index and then l, m
+    r_pos = init_pos + v * dt
 
-    phi_rlm = []
+    r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+    v_sph = Cartesian_to_sph_vel(r_pos[0], r_pos[1], r_pos[2], v[0], v[1], v[2])
 
 
-    for i in range(len(r)):
+    L = int(l.max()) + 1
 
-        phi_lm = np.zeros_like(flm_r[0, :, :], dtype=complex)  # shape (l, m) for this r
+    # McEwen–Wiaux–style equiangular grid
+    n_theta = L
+    n_phi   = 2 * L - 1
+
+    # Generate theta values
+    i = jnp.arange(n_theta)
+    theta = (jnp.pi * (2 * i + 1)) / (2 * L - 1)
         
-        for l_val in l_vals:
+    # Generate phi values
+    j = jnp.arange(n_phi)
+    phi = (2 * jnp.pi * j) / (2 * L - 1)  
 
-            for m in range(-l.max(), l.max() + 1):
+    dtheta = 2 * jnp.pi / n_phi
+    dphi   = 2 * jnp.pi / n_phi         
 
-                m_ind = m + L - 1 # index in the flm array corresponding to this m value
+    parent_j = []
 
-                if abs(m) <= l_val:
+    for j_idx, ell in enumerate(l.tolist()):
+        for m in range(-ell, ell + 1):
+            parent_j.append(j_idx)
 
-                    phi_lm[l_val, m_ind] = total_phi[(l_val, m)][0][i]
-                    #print('For (l, m) = '+ str(l_val) + ',' + str(m) + ' its ' + str(total_phi[(l_val, m)][0][i]))
-                
-                else:
 
-                    phi_lm[l_val, m_ind] = 0.0 + 0.0j
+    def time_Step(r_pos, v, dt, r, eigen_energies, l, velocities, aj, total_mass, R_j_r, k, Y_lm, parent_j, average_r):
+
+        '''
+        Time step R wavefunctions
+        Construct total psi(r, theta, phi)
+        Calculate rho_psi(r, theta, phi)
+        construct total Phi(r, theta, phi) from rho_psi
+        Calculate acc vector field from Phi
+        Calculate acc_vec at star position
+        Update position from acc_vec
+        '''
+
+        start = time.time()
+
+        r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+
+
+        #Update wavefunction potential
+
+        radial_eigen_function_time_stepped = R_j_r * jnp.exp(-1j * k * dt * eigen_energies  / hbar.value)
+
+        R_modes = radial_eigen_function_time_stepped[:, parent_j]
+        aj_modes = aj[parent_j]
+
+        full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm) #Use this rather than np.sum as causes memory error due to limited vram in GPU
+
+        psi_abs2 = jnp.abs(full_psi_rtp) ** 2         # (Nr, n_theta, n_phi)
+        rho_rtp  = total_mass * psi_abs2              # (Nr, n_theta, n_phi)
+
+        Phi_rtp, r_vals = Calculating_Phi_from_rho_in_3d_optimized_at_r_orbit(l, rho_rtp, r, r_pos_sph[0], lm_pairs, G)
+
+        Phi_rtp = Phi_rtp.real
+
+        acc_vec = Acc_from_pot_3d(Phi_rtp, r_vals, theta, phi) # (3, 3, n_theta, n_phi) = (dim, Nr, n_theta, n_phi)
+
+        # Reshape to (r, theta, phi, 3) for a single interpolator
+        acc_transposed = np.moveaxis(acc_vec, 0, -1)  # shape (Nr, n_theta, n_phi, 3)
+
+        # Handle phi periodicity: extend grid to include 2π by copying phi=0 values
+        phi_extended = np.concatenate([phi, np.array([2 * np.pi])])
+        acc_extended = np.concatenate([acc_transposed, acc_transposed[:, :, :1, :]], axis=2)
+
+        interp = RegularGridInterpolator(
+            (r_vals, theta, phi_extended),
+            acc_extended,
+            method='linear'
+        )
+
+        r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+
+        acc_vec = interp(list(r_pos_sph))[0]  # Returns (a_r, a_theta, a_phi)
+
+        #print("Acceleration vector (a_r, a_theta, a_phi) at star position: ", acc_vec)
+
+        #LEAPFROG TIMESTEP
+
+        a_r = acc_vec[0]
+        a_theta = acc_vec[1]
+        a_phi = acc_vec[2]
+
+        pos_theta = r_pos_sph[1]
+        pos_phi = r_pos_sph[2]
+
+        #Convert acceleration to cartesian coordinates
+        ax, ay, az = acceleration_spherical_to_cartesian(a_r, a_theta, a_phi, pos_theta, pos_phi)
         
-        phi_rlm.append(phi_lm)
+        acc_vec_cart = np.array([ax, ay, az])
+
+        v_half = v + 0.5 * acc_vec_cart * dt
+
+        r_pos = r_pos + v_half * dt
+
+        r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+
+        print(r_pos_sph * to_kpc)
+
+        acc_vector_new = interp(list(r_pos_sph))[0]
+
+        pos_theta = r_pos_sph[1]
+        pos_phi = r_pos_sph[2]
+
+        ax, ay, az = acceleration_spherical_to_cartesian(acc_vector_new[0], acc_vector_new[1], acc_vector_new[2], pos_theta, pos_phi)
+
+        acc_vector_new_cart = np.array([ax, ay, az])
+
+        v = v_half + 0.5 * acc_vector_new_cart * dt
+
+        v_sph = Cartesian_to_sph_vel(r_pos[0], r_pos[1], r_pos[2], v[0], v[1], v[2])
+
+        
+
+        average_r_new = (average_r * (len(velocities)) + r_pos_sph[0]) / (len(velocities) + 1)
+
+
+        velocities.append(v_sph)
+
+        velocities_arr = np.array(velocities)
+
+        vel_disp = (np.std(velocities_arr[:,0])**2 + np.std(velocities_arr[:,1])**2 + np.std(velocities_arr[:,2])**2)**0.5
+
+        end = time.time()
+        print("Time for one time step (s): ", end - start)
+
+        return r_pos, v, vel_disp, average_r_new, velocities
+
     
-    phi_rlm = np.stack(phi_rlm, axis=0)  # (r, l, m) but shape (r, l, 2*L-1) therefore m = 0 corresponds to position L or index L-1
+    velocities = np.array([init_vel_sph, v_sph])
 
-    print(phi_rlm.shape)
+    stellar_v_disp = [0, (np.std(velocities[:,0])**2 + np.std(velocities[:,1])**2 + np.std(velocities[:,2])**2)**0.5]
 
-    phi_00_r = phi_rlm[:, 0, L - 1]  # shape (r,) - the l=0, m=0 coeff at each r
-    phi_1n1_r = phi_rlm[:, 1, L - 2]  # shape (r,) - the l=1, m=-1 coeff at each r
-    phi_11_r = phi_rlm[:, 1, L]      # shape (r,) - the l=1, m=1 coeff at each r
+    velocities = velocities.tolist()
 
-    fig = plt.figure(figsize = (8,6))
-    r_min = r[0]
-    r_max = r[-1]
+    average_r = (init_pos_sph[0] + r_pos_sph[0]) / 2
+    total_avg_r = [init_pos_sph[0], average_r]
+    r_values = [init_pos_sph[0], r_pos_sph[0]]
+    
 
-
-    phi_00_r_func = -(4*np.pi)**(3/2)*G*(r_max - 1/2 * r - 1/2 * r_min**2/r)
-
-    phi_1n1_func = -4*np.pi*G/3 * np.sqrt(2*np.pi/3) * (r*np.log(r_max/r) + 1/3 * r - 1/3*r_min**3/r**2)
-
-    phi_11_func = -phi_1n1_func
-
-
-    plt.plot(r , phi_00_r, label='phi_00', alpha = 0.6)
-    plt.plot(r , phi_1n1_r, label='phi_1-1', alpha = 0.6)
-    plt.plot(r , phi_11_r, label='phi_11', alpha = 0.6)
-
-    plt.plot(r , phi_00_r_func, '--', label='Analytic phi_00', alpha = 0.6)
-    plt.plot(r , phi_1n1_func, '--', label='Analytic phi_1-1', alpha = 0.6)
-    plt.plot(r , phi_11_func, '--', label='Analytic phi_11', alpha = 0.6)
-
-    plt.xlabel('r')
-    plt.ylabel('Spherical Harmonic Coefficients of Phi')
-    plt.grid()
-    plt.legend()
-    plt.show()
+    for i in range(1, num_steps-1):
+        print(i)
+        r_pos, v, vel_disp, average_r_new, velocities = time_Step(r_pos, v, dt, r, eigen_energies, l, velocities, aj, total_mass, R_j_r, i, Y_lm, parent_j, average_r)
+        stellar_v_disp.append(vel_disp)
+        total_avg_r.append(average_r_new)
+        average_r = average_r_new
+        r_values.append((r_pos[0]**2 + r_pos[1]**2 + r_pos[2]**2)**0.5)
 
 
-    L = int(l.max()) + 1 # = 24
+    return np.array(stellar_v_disp), np.array(total_avg_r), np.array(r_values), np.array(velocities)
 
-    Phi_r = []
 
-    for i in range(len(r)):
+def Simulate_time_dep_3d_Hanno_Reins(r_orbit, init_pos, dt, num_steps, r, eigen_energies, l, R_j_r, aj, total_mass, Phi_psi, Y_lm, print_every):
 
-        flm = phi_rlm[i, :, :]  # shape (l, m) for this r
+    import rebound
+    from scipy.interpolate import interpn
 
-        #Compute the inverse SHT - get back to f
+    start = time.time()
 
-        f = s2fft.inverse(flm, L, sampling = 'mw')  # shape (n_theta, n_phi)
+    acc_mag = Find_acc_mag_from_Phi(r, Phi_psi, r_orbit)
 
-        Phi_r.append(f)
+    acc_vec = acc_mag * (-init_pos / np.linalg.norm(init_pos))
 
-    Phi_rtp = jnp.stack(Phi_r, axis=0)  # shape (r, n_theta, n_phi)
-    print(Phi_rtp.shape)
+    init_vel = np.sqrt(acc_mag * r_orbit) * np.array([0, 1, 0])  # Circular orbit velocity
 
-    # Quadrature weights on the MW equiangular grid
-    w_theta = jnp.sin(theta) * dtheta  # (n_theta,)
-    w_phi = jnp.ones_like(phi) * dphi      # (n_phi,)
+    init_pos_sph = Cartesian_to_sph(init_pos[0], init_pos[1], init_pos[2])
+    init_vel_sph = Cartesian_to_sph_vel(init_pos[0], init_pos[1], init_pos[2], init_vel[0], init_vel[1], init_vel[2])
 
-    w = w_theta[:, None] * w_phi[None, :]  # (n_theta, n_phi)
-    w = w[None, :, :]
+    L = int(l.max()) + 1
+    G = GN.value * (u.from_cm**3) / (u.from_g * u.from_s**2)
+    lm_pairs = precompute_lm_pairs(L)
 
-    norm = w.sum()                  # ≈ 4π
+    # McEwen-Wiaux-style equiangular grid
+    n_theta = L
+    n_phi = 2 * L - 1
 
-    # Angle-averaged radial profile Φ(r)
-    Phi_r_dt = jnp.sum(Phi_rtp * w, axis=(1, 2)) / norm  # (Nr,)
+    # Generate theta values
+    i = jnp.arange(n_theta)
+    theta = (jnp.pi * (2 * i + 1)) / (2 * L - 1)
 
-    return Phi_rtp, Phi_r_dt, total_phi
+    # Generate phi values
+    j = jnp.arange(n_phi)
+    phi = (2 * jnp.pi * j) / (2 * L - 1)
 
+
+    parent_j = []
+
+    for j_idx, ell in enumerate(l.tolist()):
+        for m in range(-ell, ell + 1):
+            parent_j.append(j_idx)
+
+    
+    # --- First step using IAS15 ---
+    sim = rebound.Simulation()
+    sim.integrator = "ias15"
+    sim.add(m=0.0, x=init_pos[0], y=init_pos[1], z=init_pos[2],
+            vx=init_vel[0], vy=init_vel[1], vz=init_vel[2])
+
+    ps = sim.particles
+
+    def additional_forces_init(_reb_sim):
+        p = ps[0]
+        p.ax += acc_vec[0]
+        p.ay += acc_vec[1]
+        p.az += acc_vec[2]
+
+    sim.additional_forces = additional_forces_init
+    sim.integrate(dt)
+
+    p = sim.particles[0]
+    r_pos = np.array([p.x, p.y, p.z])
+    v = np.array([p.vx, p.vy, p.vz])
+
+    r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+    v_sph = Cartesian_to_sph_vel(r_pos[0], r_pos[1], r_pos[2], v[0], v[1], v[2])
+
+    velocities = np.array([init_vel_sph, v_sph])
+
+    stellar_v_disp = [0, (np.std(velocities[:, 0])**2 + np.std(velocities[:, 1])**2 + np.std(velocities[:, 2])**2)**0.5]
+
+    velocities = velocities.tolist()
+
+    average_r = (init_pos_sph[0] + r_pos_sph[0]) / 2
+    total_avg_r = [init_pos_sph[0], average_r]
+    r_values = [init_pos_sph[0], r_pos_sph[0]]
+
+
+    # --- Create persistent rebound simulation for time stepping ---
+    sim_step = rebound.Simulation()
+    sim_step.integrator = "ias15"
+    sim_step.add(m=0.0, x=r_pos[0], y=r_pos[1], z=r_pos[2], vx=v[0], vy=v[1], vz=v[2])
+    ps_step = sim_step.particles
+
+    # Mutable container for interpolator (to be updated each step)
+    interp_data = {'grid': None, 'values': None}
+
+
+    def additional_forces_step(_reb_sim):
+        p = ps_step[0]
+        pos_sph = Cartesian_to_sph(p.x, p.y, p.z)
+        # Use interpn which is faster for repeated calls
+        acc_sph = interpn(interp_data['grid'], interp_data['values'], [list(pos_sph)], method='linear', bounds_error=False, fill_value=None)[0]
+        ax, ay, az = acceleration_spherical_to_cartesian(
+            acc_sph[0], acc_sph[1], acc_sph[2],
+            pos_sph[1], pos_sph[2]
+        )
+        p.ax += ax
+        p.ay += ay
+        p.az += az
+
+    sim_step.additional_forces = additional_forces_step
+
+    end = time.time()
+    print("Initialization time (s): ", end - start)
+
+    for k in range(1, num_steps - 1):
+        '''
+        Time step R wavefunctions
+        Construct total psi(r, theta, phi)
+        Calculate rho_psi(r, theta, phi)
+        construct total Phi(r, theta, phi) from rho_psi
+        Calculate acc vector field from Phi
+        Calculate acc_vec at star position
+        Update position using IAS15 (Hanno Rein) integrator
+        '''
+
+        if k % print_every == 0:
+            print(f"Step {k}/{num_steps}")
+
+        r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+
+        to_kpc = jnp.array([u.to_Kpc, 1, 1])
+
+        print("Star position (r, theta, phi) in kpc: ", r_pos_sph * to_kpc)
+
+        start = time.time()
+
+        # Update wavefunction potential
+        radial_eigen_function_time_stepped = R_j_r * jnp.exp(-1j * k * dt * eigen_energies / hbar.value)
+
+        R_modes = radial_eigen_function_time_stepped[:, parent_j]
+        aj_modes = aj[parent_j]
+
+        full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm)
+
+        psi_abs2 = jnp.abs(full_psi_rtp) ** 2
+        rho_rtp = total_mass * psi_abs2
+
+        end = time.time()
+
+        print("Time for wavefunction update (s): ", end - start)
+
+        Phi_rtp, r_vals = Calculating_Phi_from_rho_in_3d_optimized_at_r_orbit_HR(l, rho_rtp, r, r_pos_sph[0], lm_pairs, G)
+
+        print(Phi_rtp.shape, r_vals.shape)
+
+        Phi_rtp = Phi_rtp.real
+
+        start = time.time()
+        acc_vec_field = Acc_from_pot_3d(Phi_rtp, r_vals, theta, phi)
+        end = time.time()
+        print("Time for acceleration field calculation (s): ", end - start)
+
+        start = time.time()
+        # Prepare interpolator data (update values only)
+        acc_transposed = np.moveaxis(np.array(acc_vec_field), 0, -1)
+        acc_extended = np.concatenate([acc_transposed, acc_transposed[:, :, :1, :]], axis=2)
+
+        phi_ext = np.concatenate([np.array(phi), np.array([2 * np.pi])])
+        interp_data['grid'] = (np.array(r_vals), np.array(theta), phi_ext)
+        interp_data['values'] = acc_extended
+
+        # Update particle state and integrate
+        p = ps_step[0]
+        p.x, p.y, p.z = r_pos[0], r_pos[1], r_pos[2]
+        p.vx, p.vy, p.vz = v[0], v[1], v[2]
+
+        target_time = sim_step.t + dt
+        sim_step.integrate(target_time)
+
+        # Read back state
+        p = sim_step.particles[0]
+        r_pos = np.array([p.x, p.y, p.z])
+        v = np.array([p.vx, p.vy, p.vz])
+        end = time.time()
+        print("Time for updating particle position and interpolating acc (s): ", end - start)
+
+
+        r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+        v_sph = Cartesian_to_sph_vel(r_pos[0], r_pos[1], r_pos[2], v[0], v[1], v[2])
+
+        average_r_new = (average_r * (len(velocities)) + r_pos_sph[0]) / (len(velocities) + 1)
+
+        velocities.append(v_sph)
+
+        velocities_arr = np.array(velocities)
+
+        vel_disp = (np.std(velocities_arr[:, 0])**2 + np.std(velocities_arr[:, 1])**2 + np.std(velocities_arr[:, 2])**2)**0.5
+        
+
+        stellar_v_disp.append(vel_disp)
+        total_avg_r.append(average_r_new)
+        average_r = average_r_new
+        r_values.append((r_pos[0]**2 + r_pos[1]**2 + r_pos[2]**2)**0.5)
+
+    return np.array(stellar_v_disp), np.array(total_avg_r), np.array(r_values), np.array(velocities)
+
+
+def Make_animation_t_dep_3d(r_orbit, init_pos, init_vel, dt, num_steps, r, eigen_energies, l, R_j_r, aj, total_mass, Y_lm, Phi_psi):
+
+    global r_pos, v, acc_vec, avg_r, k
+
+    r_pos = init_pos
+
+    v = init_vel
+
+    acc_mag = Find_acc_mag_from_Phi(r, Phi_psi, r_orbit)
+
+    acc_vec = acc_mag * (-init_pos / np.linalg.norm(init_pos)) #Cartesian acceleration vector
+
+    init_vel = np.sqrt(acc_mag * r_orbit) * np.array([0, 1, 0]) #Circular orbit velocity
+
+    r_pos = init_pos
+    v = init_vel
+
+
+    L = int(l.max()) + 1
+
+    # McEwen–Wiaux–style equiangular grid
+    n_theta = L
+    n_phi   = 2 * L - 1
+
+    # Generate theta values
+    i = jnp.arange(n_theta)
+    theta = (jnp.pi * (2 * i + 1)) / (2 * L - 1)
+        
+    # Generate phi values
+    j = jnp.arange(n_phi)
+    phi = (2 * jnp.pi * j) / (2 * L - 1)  
+
+    dtheta = 2 * jnp.pi / n_phi
+    dphi   = 2 * jnp.pi / n_phi         
+
+    parent_j = []
+
+    for j_idx, ell in enumerate(l.tolist()):
+        for m in range(-ell, ell + 1):
+            parent_j.append(j_idx)
+    
+
+    #Figure
+    fig, ax = plt.subplots() 
+
+    orbit = plt.Circle((0, 0), r_orbit * u.to_Kpc, color='black', fill=False, linestyle='--', label='Star Orbit')
+    ax.add_patch(orbit)
+
+    avg_r = (r_pos[0]**2 + r_pos[1]**2)**0.5
+    avg_radial_pos = plt.Circle((0, 0), avg_r * u.to_Kpc, color='orange', fill=False, linestyle='-.', label='Approximate Average Radius of Orbit')
+    ax.add_patch(avg_radial_pos)
+
+    ax.set_xlim(-0.5 , 0.5)
+    ax.set_ylim(-0.5 , 0.5)
+
+    ax.set_aspect('equal', adjustable='box')
+
+    ax.scatter(0, 0, color='blue', label='Halo Center', marker='x')
+
+
+    point, = ax.plot([r_pos[0] * u.to_Kpc], [r_pos[1] * u.to_Kpc], 'go', label='Star', color='red')
+
+
+    #plt.scatter(r_pos[0] * u.to_Kpc, r_pos[1] * u.to_Kpc, color='green', label='Star Position at time t = ' + str(i+1) + 'dt')
+
+    ax.set_xlabel(r"$x \;\;\mathrm{[kpc]}$", fontsize = 15)
+    ax.set_ylabel(r"$y \;\;\mathrm{[kpc]}$", fontsize = 15)
+    #plt.show()
+
+    def update(frame, dt=dt, eigen_energies=eigen_energies, l=l, aj=aj, R_j_r = R_j_r, total_mass=total_mass, r=r, dtheta=dtheta, dphi=dphi, theta=theta, phi=phi, parent_j=parent_j, Y_lm=Y_lm):
+
+        global r_pos, v, acc_vec, avg_r, k
+
+        k = frame + 1
+
+        print("Frame: ", frame)
+
+        a_r = acc_vec[0]
+        a_theta = acc_vec[1]
+        a_phi = acc_vec[2]
+
+        r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+        pos_theta = r_pos_sph[1]
+        pos_phi = r_pos_sph[2]
+
+        print("Acceleration vector (a_r, a_theta, a_phi) at star position: ", acc_vec)
+
+
+        #Convert acceleration to cartesian coordinates
+        ax, ay, az = acceleration_spherical_to_cartesian(a_r, a_theta, a_phi, pos_theta, pos_phi)
+        
+        acc_vec_cart = np.array([ax, ay, az])
+
+
+        v_new = v + acc_vec_cart * dt #MUST BE CARTESIAN
+
+        #Leapfrog
+        r_pos = r_pos + v * dt + 0.5 * acc_vec_cart * dt**2
+
+        v = v_new
+
+
+        r_pos_sph = Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
+        v_sph = Cartesian_to_sph_vel(r_pos[0], r_pos[1], r_pos[2], v[0], v[1], v[2])
+
+        print(r_pos_sph*u.to_Kpc)
+
+        #Update wavefunction potential
+
+        radial_eigen_function_time_stepped = R_j_r * jnp.exp(-1j * k * dt * eigen_energies  / hbar.value)
+
+        R_modes = radial_eigen_function_time_stepped[:, parent_j]
+        aj_modes = aj[parent_j]
+
+        full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm) #Use this rather than np.sum as causes memory error due to limited vram in GPU
+
+        psi_abs2 = jnp.abs(full_psi_rtp) ** 2         # (Nr, n_theta, n_phi)
+        rho_rtp  = total_mass * psi_abs2              # (Nr, n_theta, n_phi)
+
+        Phi_rtp, r_vals = Calculating_Phi_from_rho_in_3d_optimized_at_r_orbit(l, rho_rtp, r, dtheta, dphi, theta, phi, r_pos_sph[0])
+
+        Phi_rtp = Phi_rtp.real
+
+        acc_vec = Acc_from_pot_3d(Phi_rtp, r_vals, theta, phi) # (3, 3, n_theta, n_phi) = (dim, Nr, n_theta, n_phi)
+
+        # Reshape to (r, theta, phi, 3) for a single interpolator
+        acc_transposed = np.moveaxis(acc_vec, 0, -1)  # shape (3, 24, 47, 3)
+
+        interp = RegularGridInterpolator(
+            (r_vals, theta, phi),
+            acc_transposed,
+            method='linear'
+        )
+
+        acc_vec = interp(list(r_pos_sph))[0]
+
+        r_mag = r_pos_sph[0]
+
+        point.set_data([r_pos[0] * u.to_Kpc], [r_pos[1] * u.to_Kpc]) 
+
+
+        avg_r_new = (avg_r * frame + r_mag) / (frame + 1)
+        avg_radial_pos.set_radius(avg_r_new * u.to_Kpc)
+        avg_r = avg_r_new
+
+        return point, avg_radial_pos
+
+    matplotlib.rcParams['animation.embed_limit'] = 2**128
+
+    ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=10, blit=True)
+
+    return ani
