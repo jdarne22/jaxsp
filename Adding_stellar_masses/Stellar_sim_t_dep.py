@@ -87,7 +87,7 @@ def build_grad_Phi(L, lm_pairs, norms):
         """
         Evaluate the gravitational potential at a single point (r, theta, phi).
         """
-        # --- Radial: Lagrange quadratic interpolation ---
+        # Radial: Lagrange quadratic interpolation
         r0, r1, r2 = r_vals[0], r_vals[1], r_vals[2]
         w0 = (r - r1) * (r - r2) / ((r0 - r1) * (r0 - r2))
         w1 = (r - r0) * (r - r2) / ((r1 - r0) * (r1 - r2))
@@ -96,7 +96,7 @@ def build_grad_Phi(L, lm_pairs, norms):
         coeff_real = phi_lm_real[:, 0]*w0 + phi_lm_real[:, 1]*w1 + phi_lm_real[:, 2]*w2
         coeff_imag = phi_lm_imag[:, 0]*w0 + phi_lm_imag[:, 1]*w1 + phi_lm_imag[:, 2]*w2
 
-        # --- Angular: evaluate Y_lm(theta, phi) ---
+        # Angular: evaluate Y_lm(theta, phi)
         # Y_l^m = N_{l,|m|} * P_l^{|m|}(cos theta) * exp(i*m*phi)
         # For m < 0: Y_l^{-|m|} = (-1)^|m| * conj(Y_l^{|m|})
         # Split into real/imag to keep everything real for jax.grad
