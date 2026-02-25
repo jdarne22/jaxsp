@@ -32,12 +32,9 @@ from scipy.interpolate import RegularGridInterpolator
 m22 = 1
 u = jsp.set_schroedinger_units(m22)
 
-<<<<<<< HEAD
+
 def return_u():
     return u
-
-=======
->>>>>>> 3ed0b1a5de5c33953664073a29eec035f3c39deb
 
 def Obtain_pot(rmin, rmax, rho_psi_vals, r):
 
@@ -117,11 +114,7 @@ def Cartesian_to_sph(x, y, z):
     r = jnp.sqrt(x**2 + y**2 + z**2)
     theta = jnp.arccos(z / r) 
     phi = jnp.arctan2(y, x) % (2 * jnp.pi)
-<<<<<<< HEAD
     return jnp.array([r, theta, phi])
-=======
-    return np.array([r, theta, phi])
->>>>>>> 3ed0b1a5de5c33953664073a29eec035f3c39deb
 
 
 def Cartesian_to_sph_vel(x, y, z, vx, vy, vz):
@@ -133,23 +126,14 @@ def Cartesian_to_sph_vel(x, y, z, vx, vy, vz):
     vtheta = (z * (x * vx + y * vy) - r**2 * vz) / (r * jnp.sqrt(x**2 + y**2))
     vphi = (x * vy - y * vx) / (x**2 + y**2)**0.5
 
-<<<<<<< HEAD
+
     return jnp.array([vr, vtheta, vphi])
-=======
-    return np.array([vr, vtheta, vphi])
->>>>>>> 3ed0b1a5de5c33953664073a29eec035f3c39deb
 
 
 def acceleration_spherical_to_cartesian(a_r, a_theta, a_phi, theta, phi):
 
-<<<<<<< HEAD
     sin_t, cos_t = jnp.sin(theta), jnp.cos(theta)
     sin_p, cos_p = jnp.sin(phi), jnp.cos(phi)
-=======
-    sin_t, cos_t = np.sin(theta), np.cos(theta)
-    sin_p, cos_p = np.sin(phi), np.cos(phi)
->>>>>>> 3ed0b1a5de5c33953664073a29eec035f3c39deb
-
     a_x = a_r * sin_t * cos_p + a_theta * cos_t * cos_p - a_phi * sin_p
     a_y = a_r * sin_t * sin_p + a_theta * cos_t * sin_p + a_phi * cos_p
     a_z = a_r * cos_t - a_theta * sin_t 
