@@ -1,6 +1,7 @@
 '''CODE FOR RUNNING TIME DEPENDENT STELLAR SIMULATIONS WITH JAXSP'''
 
 
+
 from time import time
 import Stellar_sim_funcs as SSF
 
@@ -85,44 +86,45 @@ def precompute_lm_pairs_Ylms(l):
 
 class SimulationAnimator:
     """
-    3D animation of axion dark matter density granules and stellar orbit.
+    3D animation of axion dark matter density in the equatorial (z=0) plane.
+    The surface height at each (x, y) point encodes the local density.
     """
 
-    def __init__(self, L, r_grid, r_pos, u):
+    def __init__(self, L, r_grid, u):
 
         self.u = u
         self.L = L
 
-        # MW-sampling angular grid (same as used for the SHT)
+        # MW-sampling angular grid
         n_theta = L
         n_phi   = 2 * L - 1
         i_arr   = np.arange(n_theta)
-        self.theta = (np.pi * (2 * i_arr + 1)) / (2 * L - 1)
+        theta   = (np.pi * (2 * i_arr + 1)) / (2 * L - 1)
         j_arr   = np.arange(n_phi)
-        self.phi   = (2 * np.pi * j_arr) / (2 * L - 1)
-        self.phi   = np.append(self.phi, 2 * np.pi)  # close the surface for smooth plotting
+        phi     = (2 * np.pi * j_arr) / (2 * L - 1)
+        phi     = np.append(phi, 2 * np.pi)  # close phi ring for smooth plotting
 
-        # Closest radial bin to the requested shell radius
-        self.r_shell_idx = int(np.argmin(np.abs(np.array(r_grid) - r_pos)))
-        self.r_shell = float(r_grid[self.r_shell_idx])
+        # Index of the theta slice closest to pi/2 (equatorial plane, z=0)
+        self.theta_eq_idx = int(np.argmin(np.abs(theta - np.pi / 2)))
+        print(f"Equatorial slice: theta index {self.theta_eq_idx}, "
+              f"theta = {theta[self.theta_eq_idx]:.4f} rad (pi/2 = {np.pi/2:.4f})")
 
-        # Cartesian mesh for the spherical surface (in kpc for display)
-        Theta, Phi = np.meshgrid(self.theta, self.phi, indexing='ij')
-        R_kpc = self.r_shell * float(u.to_Kpc)
-        self.X = R_kpc * np.sin(Theta) * np.cos(Phi)
-        self.Y = R_kpc * np.sin(Theta) * np.sin(Phi)
-        self.Z = R_kpc * np.cos(Theta)
-        self.R_kpc = R_kpc
+        # 2D polar grid in the xy-plane: r x phi → (X, Y)
+        r_kpc = np.array(r_grid) * float(u.to_Kpc)
+        R_grid, Phi_grid = np.meshgrid(r_kpc, phi, indexing='ij')  # (Nr, n_phi+1)
+        self.X = R_grid * np.cos(Phi_grid)
+        self.Y = R_grid * np.sin(Phi_grid)
 
         # Frame storage
         self.density_frames = []
         self.particle_positions = []
 
     def store_frame(self, rho_rtp, particle_xyz):
-        """Capture one snapshot of the density shell and particle position."""
-        rho_shell = np.array(np.real(rho_rtp[self.r_shell_idx, :, :]))  # (n_theta, n_phi)
-        rho_shell = np.append(rho_shell, rho_shell[:, 0:1], axis=1)     # close phi for plotting
-        self.density_frames.append(rho_shell)
+        """Capture one snapshot: equatorial density slice + particle position."""
+        # rho_rtp shape: (Nr, n_theta, n_phi)
+        rho_eq = np.array(np.real(rho_rtp[:, self.theta_eq_idx, :]))  # (Nr, n_phi)
+        rho_eq = np.append(rho_eq, rho_eq[:, 0:1], axis=1)            # close phi: (Nr, n_phi+1)
+        self.density_frames.append(rho_eq)
         self.particle_positions.append([
             float(particle_xyz[0]) * float(self.u.to_Kpc),
             float(particle_xyz[1]) * float(self.u.to_Kpc),
@@ -132,6 +134,8 @@ class SimulationAnimator:
     def create_animation(self, interval=200, save_path=None, orbit_radius_kpc=None):
         """
         Build a matplotlib FuncAnimation from the stored frames.
+        X/Y axes are spatial coordinates in the equatorial plane (kpc).
+        Z axis is the density value at each (x, y) point.
         """
 
         fig = plt.figure(figsize=(12, 9))
@@ -139,61 +143,56 @@ class SimulationAnimator:
 
         cmap = cm.inferno
 
-        def frame_colors(frame_idx):
-            rho = self.density_frames[frame_idx]
-            frame_norm = Normalize(vmin=rho.min(), vmax=rho.max())
-            return cmap(frame_norm(rho))
+        # Use a fixed global colour scale across all frames so the oscillation is visible
+        all_rho = np.concatenate([f.ravel() for f in self.density_frames])
+        global_norm = Normalize(vmin=all_rho.min(), vmax=all_rho.max())
 
-        # Initial density surface
-        colors0 = frame_colors(0)
-        surf = [ax.plot_surface(self.X, self.Y, self.Z,
-                                facecolors=colors0, shade=False, alpha=0.6)]
+        # Pre-convert positions once to avoid per-frame allocation
+        all_positions = np.array(self.particle_positions)
 
-        # Particle marker
+        # Initial density surface: Z = rho(x, y)
+        rho0 = self.density_frames[0]
+        surf = [ax.plot_surface(self.X, self.Y, rho0,
+                                cmap=cmap, norm=global_norm, shade=False, alpha=0.85)]
+
+        # Particle marker — projected to z=0 in plot space (particle lives in xy-plane)
         p0 = self.particle_positions[0]
-        particle_dot = ax.scatter([p0[0]], [p0[1]], [p0[2]],
-                                  color='green', s=80, zorder=5,
+        particle_dot = ax.scatter([p0[0]], [p0[1]], [0.0],
+                                  color='lime', s=80, zorder=5,
                                   edgecolors='white', linewidths=0.5,
                                   depthshade=False)
 
-        # Orbit trail
-        trail_line, = ax.plot([p0[0]], [p0[1]], [p0[2]],
-                              color='green', alpha=0.4, linewidth=1)
+        # Orbit trail projected to z=0
+        trail_line, = ax.plot([p0[0]], [p0[1]], [0.0],
+                              color='lime', alpha=0.5, linewidth=1)
 
         # Axis limits
         if orbit_radius_kpc is not None:
-            lim = orbit_radius_kpc * 1.8
+            xy_lim = orbit_radius_kpc * 1.3
         else:
             all_pos = np.array(self.particle_positions)
-            lim = np.max(np.abs(all_pos)) * 1.3
-        ax.set_xlim(-lim, lim)
-        ax.set_ylim(-lim, lim)
-        ax.set_zlim(-lim, lim)
+            xy_lim = np.max(np.abs(all_pos[:, :2])) * 1.3
+        ax.set_xlim(-xy_lim, xy_lim)
+        ax.set_ylim(-xy_lim, xy_lim)
         ax.set_xlabel(r'$x$ [kpc]')
         ax.set_ylabel(r'$y$ [kpc]')
-        ax.set_zlabel(r'$z$ [kpc]')
+        ax.set_zlabel(r'$\rho$ [a.u.]')
         title = ax.set_title('Time step: 0')
 
-        # Colorbar (uses first frame range as reference)
-        rho0 = self.density_frames[0]
-        mappable = cm.ScalarMappable(norm=Normalize(vmin=rho0.min(), vmax=rho0.max()), cmap=cmap)
+        mappable = cm.ScalarMappable(norm=global_norm, cmap=cmap)
         fig.colorbar(mappable, ax=ax, shrink=0.5, label=r'$\rho$')
 
         def update(frame):
-            # Remove old surface and redraw with per-frame normalised colours
             surf[0].remove()
-            colors = frame_colors(frame)
-            surf[0] = ax.plot_surface(self.X, self.Y, self.Z,
-                                      facecolors=colors, shade=False, alpha=0.6)
+            rho = self.density_frames[frame]
+            surf[0] = ax.plot_surface(self.X, self.Y, rho,
+                                      cmap=cmap, norm=global_norm, shade=False, alpha=0.85)
 
-            # Update particle position
             pos = self.particle_positions[frame]
-            particle_dot._offsets3d = ([pos[0]], [pos[1]], [pos[2]])
+            particle_dot._offsets3d = ([pos[0]], [pos[1]], [0.0])
 
-            # Update orbit trail up to current frame
-            trail = np.array(self.particle_positions[:frame + 1])
-            trail_line.set_data(trail[:, 0], trail[:, 1])
-            trail_line.set_3d_properties(trail[:, 2])
+            trail_line.set_data(all_positions[:frame + 1, 0], all_positions[:frame + 1, 1])
+            trail_line.set_3d_properties(np.zeros(frame + 1))
 
             title.set_text(f'Time step: {frame + 1}')
             return surf[0], particle_dot, trail_line
@@ -222,8 +221,8 @@ class SimulationAnimator:
 
 class StellarSimTDep:
 
-    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins,
-                 animate=False):
+    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, static, frozen,
+                 animate=False, animate_every=1):
 
         # Instance variables - reset for each new simulation
         self.velocities = []
@@ -232,6 +231,8 @@ class StellarSimTDep:
         self.r_values = []
         self.positions_xyz = []
         self.time_step = 0
+        self.static = static
+        self.frozen = frozen
 
         self.m22 = m22
         self.u = jsp.set_schroedinger_units(self.m22)
@@ -252,6 +253,7 @@ class StellarSimTDep:
 
         # Animation settings
         self.animate = animate
+        self.animate_every = animate_every
         self.animator = None
 
 
@@ -401,7 +403,7 @@ class StellarSimTDep:
         #Create persistent rebound simulation for time stepping
         #self.ps_step = ps_step
 
-        return R_j_r, l, total_mass, eigen_energies, aj
+        return R_j_r, l, total_mass, eigen_energies, aj, density_params
 
 
     def update_summary_stats(self, vel, r_vec):
@@ -429,13 +431,13 @@ class StellarSimTDep:
 
 
 
-    def construct_total_psi(self, R_j_r, eigen_energies, aj, total_mass, Y_lm, parent_j):
+    def construct_frozen_rho(self, R_j_r, aj, total_mass, Y_lm, parent_j):
 
         '''Wavefunction constructed density profile as a function of r
         '''
 
         # Update wavefunction potential
-        radial_eigen_function_time_stepped = R_j_r * jnp.exp(-1j * self.time_step * self.dt * eigen_energies / hbar.value)
+        radial_eigen_function_time_stepped = R_j_r * jnp.exp(0)
 
         R_modes = radial_eigen_function_time_stepped[:, parent_j]
         aj_modes = aj[parent_j]
@@ -446,6 +448,21 @@ class StellarSimTDep:
         rho_rtp = total_mass * psi_abs2  # shape (Nr, n_theta, n_phi)
 
         return rho_rtp
+
+    def construct_static_rho(self, density_params):
+
+        rho = jax.vmap(jsp.rho, in_axes=(0,None))
+        rho_c_nfw_t = rho(self.r, density_params)
+
+        N_theta = self.L
+        N_phi   = 2 * self.L - 1
+
+        rho_rtp = jnp.zeros((self.no_radius_bins, N_theta, N_phi))
+
+        rho_rtp = rho_rtp.at[:, :, :].set(rho_c_nfw_t[:, None, None])
+
+        return rho_rtp
+
 
 
     def forward_s2fft(self, rho_rtp):
@@ -606,7 +623,7 @@ class StellarSimTDep:
     def run_simulation(self):
 
         start = time()
-        R_j_r, l, total_mass, eigen_energies, aj = self.first_time_step()
+        R_j_r, l, total_mass, eigen_energies, aj, density_params = self.first_time_step()
         end = time()
         #print(f"First time step completed in {end - start:.2f} seconds")
 
@@ -615,28 +632,20 @@ class StellarSimTDep:
         end = time()
         #print(f"Precomputation of (l,m) pairs and Y_lm grid completed in {end - start:.2f} seconds")
 
+
+
+
         self.lm_pairs_np = np.array(lm_pairs)  # numpy copy for scipy calls inside construct_a
 
         #Using Boris code to get k_ln nodes and cln norms for all ell up to Lmax.
         k_list = []
         cln_list = []
-
-        #N_min = int(round(self.no_radius_bins/(2*np.log(self.rmax/self.rmin)), 0))
-
-        #N = int(self.no_radius_bins / 5)
-
-        #N_max = int(round(2 * self.no_radius_bins / (np.log(self.rmax) - np.log(self.rmin)), 0))
-
-        N = int(self.no_radius_bins)
-
-        print(N)
-
         for ell in range(self.L):
-            k_nodes, _cln = BSBT.constructGridAndNorms(self.rmax, N, ell)
+            k_nodes, _cln = BSBT.constructGridAndNorms(self.rmax, self.no_radius_bins, ell)
             k_list.append(np.asarray(k_nodes, dtype=np.float64)) 
             cln_list.append(np.asarray(_cln, dtype=np.float64))
 
-
+        
         # Rearrange so shape is defined by each ell
         kln_nodes_by_ell = jnp.asarray(np.stack(k_list, axis=0))  # (Lmax+1, K)
         cln_norms_by_ell = jnp.asarray(np.stack(cln_list, axis=0))  # (Lmax+1, K)
@@ -659,41 +668,46 @@ class StellarSimTDep:
 
 
 
+        
+
+        if self.static == True:
+            rho_rtp = self.construct_static_rho(density_params)
+
+        elif self.frozen == True:
+            rho_rtp = self.construct_frozen_rho(R_j_r, aj, total_mass, Y_lm, parent_j)
+
+        
+        # 2. Forward s2fft to get rho_lm(r)
+        start = time()
+        rho_lm_r = self.forward_s2fft(rho_rtp)
+        end = time()
+        print(f"Forward s2fft completed in {end - start:.2f} seconds")
+
+        # 3. Convert rho_lm(r) to rho_nlm for autodiff
+        start = time()
+        phi_nlm = self.Bessel_function_expansion_of_rho_lm(rho_lm_r, lm_pairs, kln_nodes_by_ell, cln_norms_by_ell)
+        end = time()
+        print(f"Conversion from rho_lm(r) to rho_nlm completed in {end - start:.2f} seconds")
+
+
+        # Sort phi_nlm rows by l once here — reused across all IAS15 sub-steps
+        self._phi_sorted = phi_nlm[self._lm_sort_order]   # (N_lm, N_k)
+
+
         # Set up animator
         if self.animate:
-            r_shell = self.r_values[0]  # Start with the initial radius of the particle
-            self.animator = SimulationAnimator(self.L, self.r, r_shell, self.u)
-            print(f"Animation enabled: density shell at r = {self.animator.r_shell * self.u.to_Kpc:.4f} kpc")
+            self.animator = SimulationAnimator(self.L, self.r, self.u)
+            print(f"Animation enabled: equatorial (z=0) density slice")
 
         while self.time_step < self.no_time_steps:
 
             print(f"Time step {self.time_step + 1} / {self.no_time_steps}")
 
-            # 1. Construct total psi and rho on MW grid
-            start = time()
-            rho_rtp = self.construct_total_psi(R_j_r, eigen_energies, aj, total_mass, Y_lm, parent_j)
-            end = time()
-            print(f"Constructing total psi and rho completed in {end - start:.2f} seconds")
 
             # 1b. Capture animation frame (density at this instant + particle position)
-            if self.animate:
+            if self.animate and self.time_step % self.animate_every == 0:
                 self.animator.store_frame(rho_rtp, self.r_pos)
 
-            # 2. Forward s2fft to get rho_lm(r)
-            start = time()
-            rho_lm_r = self.forward_s2fft(rho_rtp)
-            end = time()
-            print(f"Forward s2fft completed in {end - start:.2f} seconds")
-
-            # 3. Convert rho_lm(r) to rho_nlm for autodiff
-            start = time()
-            phi_nlm = self.Bessel_function_expansion_of_rho_lm(rho_lm_r, lm_pairs, kln_nodes_by_ell, cln_norms_by_ell)
-            end = time()
-            print(f"Conversion from rho_lm(r) to rho_nlm completed in {end - start:.2f} seconds")
-
-
-            # Sort phi_nlm rows by l once here — reused across all IAS15 sub-steps
-            self._phi_sorted = phi_nlm[self._lm_sort_order]   # (N_lm, N_k)
 
             # 5. Time step particle — IAS15 calls the callback which uses jax.grad
             start = time()

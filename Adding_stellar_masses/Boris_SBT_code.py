@@ -224,3 +224,25 @@ def forward_dsbt_all(
         out = out.at[idx].set(res)
 
     return out
+
+
+def forward_dsbt_function(
+    f_r: jnp.ndarray,             # (Nr,) — function evaluated on r grid
+    r: jnp.ndarray,               # (Nr,)
+    ell: int,
+    kln_nodes: jnp.ndarray,       # (K,) — k-nodes for this ell
+) -> jnp.ndarray:
+    """
+    Forward DSBT for a gridded f(r) at a single order ell.
+
+    Same computation as forward_dsbt_all but takes a 1D array directly
+    rather than a pre-computed rho_lm_r array, with no loop over (ell, m).
+
+    Returns: (K,)
+    """
+    f_r = jnp.asarray(f_r)                         # (Nr,)
+    f_b = f_r[None, :]                              # (1, Nr)
+    ell_b = jnp.array([ell], dtype=jnp.int32)       # (1,)
+    k_b = kln_nodes[None, :]                        # (1, K)
+    res = forward_dsbt_chunk(f_b, ell_b, r, k_b)   # (1, K)
+    return res[0]                                   # (K,)
