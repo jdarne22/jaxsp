@@ -152,7 +152,7 @@ def precompute_lm_pairs_Ylm_norms(l):
 
     # McEwen-Wiaux-style equiangular grid
 
-    L = max(l)+1
+    L = int(max(l))+1
 
     n_theta = L
     n_phi = 2 * L - 1

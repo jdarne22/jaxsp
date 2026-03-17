@@ -221,7 +221,7 @@ class SimulationAnimator:
 
 class StellarSimTDep:
 
-    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, static, frozen,
+    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, N_max, static, frozen,
                  animate=False, animate_every=1):
 
         # Instance variables - reset for each new simulation
@@ -233,6 +233,8 @@ class StellarSimTDep:
         self.time_step = 0
         self.static = static
         self.frozen = frozen
+
+        self.N_max = N_max
 
         self.m22 = m22
         self.u = jsp.set_schroedinger_units(self.m22)
@@ -302,8 +304,27 @@ class StellarSimTDep:
         self.rmin = rmin
         self.rmax = rmax
 
-        r = jnp.logspace(jnp.log10(self.rmin), jnp.log10(self.rmax), self.no_radius_bins)
-        self.r = r
+        k_list = []
+        cln_list = []
+        for ell in range(self.L):
+            k_nodes, _cln = BSBT.constructGridAndNorms(self.rmax, self.N_max, ell)
+            k_list.append(np.asarray(k_nodes, dtype=np.float64))
+            cln_list.append(np.asarray(_cln, dtype=np.float64))
+
+        kln_nodes_by_ell = jnp.asarray(np.stack(k_list, axis=0))  # (Lmax+1, K)
+        cln_norms_by_ell = jnp.asarray(np.stack(cln_list, axis=0))  # (Lmax+1, K)
+
+        self.kln_nodes_by_ell = kln_nodes_by_ell
+        self.cln_norms_by_ell = cln_norms_by_ell
+
+        Z_0 = BSBT.rootsSphericalBesselFunctions(self.L, self.N_max + 1)[0]
+        r_grid = Z_0[:self.N_max] / Z_0[self.N_max] * self.rmax
+        
+        r = r_grid
+        self.r = r_grid
+
+        #r = jnp.logspace(jnp.log10(self.rmin), jnp.log10(self.rmax), self.no_radius_bins)
+        #self.r = r
 
         R_j_r = eval_library(r, eigenstate_lib.radial_eigenmode_params)
 
@@ -488,11 +509,10 @@ class StellarSimTDep:
         L = int(lm_l.max()) + 1
 
         rho_lm_r_j = jnp.asarray(rho_lm_r)   # (Nr, Lmax+1, 2L-1)
-        r_j = jnp.asarray(self.r)
 
         f_l_kln_all = BSBT.forward_dsbt_all(
             rho_lm_r=rho_lm_r_j,
-            r=r_j,
+            r=self.r,
             lm_l=lm_l,
             lm_m=lm_m,
             L=L,
@@ -501,7 +521,33 @@ class StellarSimTDep:
         )
 
         # Obtain phi from rho
-        Phi_nlm = -4 * jnp.pi * self.G * cln_norms_by_ell[lm_l] * f_l_kln_all / kln_nodes_by_ell[lm_l]**2  # (Nlm, N_k)
+        Phi_nlm = -4 * jnp.pi * self.G * self.cln_norms_by_ell[lm_l] * f_l_kln_all / self.kln_nodes_by_ell[lm_l]**2  # (Nlm, N_k)
+
+        from scipy.special import spherical_jn as sci_jn
+
+        k_nodes_0 = np.array(self.kln_nodes_by_ell[0])            # (K,)
+        cln_0     = np.array(self.cln_norms_by_ell[0])            # (K,)
+        f_00      = np.array(f_l_kln_all[lm_l == 0][0])           # (K,)
+        r_np      = np.array(self.r)                               # (Nr,)
+
+        j_kr = np.stack([sci_jn(0, k * r_np) for k in k_nodes_0])  # (K, Nr)
+        l_0m_0_recon_rho = (f_00 * cln_0) @ j_kr                   # (Nr,)
+
+        plt.plot(self.r * self.u.to_Kpc, l_0m_0_recon_rho, label='Reconstructed l=0,m=0')
+
+
+        original_l_0m_0 = rho_lm_r[:, 0, self.L - 1]  # (Nr, L, 2L-1) with McEwen-Wiaux ordering: l=0, m=0 is at index (0, 0, L-1)
+        plt.plot(self.r * self.u.to_Kpc, original_l_0m_0, label='Original l=0,m=0', linestyle='dashed')
+
+        plt.xlabel('r (kpc)')
+        plt.ylabel('rho_lm(r)')
+        plt.yscale('log')
+        plt.xscale('log')
+        plt.axvline(0.19, color='gray', linestyle='dotted', label='r_half')
+        plt.title('Bessel expansion reconstruction of rho_lm(r)')
+        plt.legend()
+        plt.show()
+
 
         return np.array(Phi_nlm)
 
@@ -633,26 +679,21 @@ class StellarSimTDep:
         #print(f"Precomputation of (l,m) pairs and Y_lm grid completed in {end - start:.2f} seconds")
 
 
-
-
         self.lm_pairs_np = np.array(lm_pairs)  # numpy copy for scipy calls inside construct_a
 
         #Using Boris code to get k_ln nodes and cln norms for all ell up to Lmax.
-        k_list = []
-        cln_list = []
-        for ell in range(self.L):
-            k_nodes, _cln = BSBT.constructGridAndNorms(self.rmax, self.no_radius_bins, ell)
-            k_list.append(np.asarray(k_nodes, dtype=np.float64)) 
-            cln_list.append(np.asarray(_cln, dtype=np.float64))
+        # k_list = []
+        # cln_list = []
+        # for ell in range(self.L):
+        #     k_nodes, _cln = BSBT.constructGridAndNorms(self.rmax, self.no_radius_bins, ell)
+        #     k_list.append(np.asarray(k_nodes, dtype=np.float64)) 
+        #     cln_list.append(np.asarray(_cln, dtype=np.float64))
 
         
         # Rearrange so shape is defined by each ell
-        kln_nodes_by_ell = jnp.asarray(np.stack(k_list, axis=0))  # (Lmax+1, K)
-        cln_norms_by_ell = jnp.asarray(np.stack(cln_list, axis=0))  # (Lmax+1, K)
-        self.kln_nodes_by_ell = kln_nodes_by_ell
-        self.cln_norms_by_ell = cln_norms_by_ell
-        self.kln_np = np.array(kln_nodes_by_ell, dtype=np.float64)  # float64 for Bessel accuracy
-        self.cln_np = np.array(cln_norms_by_ell, dtype=np.float64)  # float64 for Bessel accuracy
+
+        self.kln_np = np.array(self.kln_nodes_by_ell, dtype=np.float64)  # float64 for Bessel accuracy
+        self.cln_np = np.array(self.cln_norms_by_ell, dtype=np.float64)  # float64 for Bessel accuracy
 
 
         self._ell_bc = np.arange(self.L, dtype=np.float64)[:, None]  # (L, 1) for jv broadcast
@@ -685,7 +726,7 @@ class StellarSimTDep:
 
         # 3. Convert rho_lm(r) to rho_nlm for autodiff
         start = time()
-        phi_nlm = self.Bessel_function_expansion_of_rho_lm(rho_lm_r, lm_pairs, kln_nodes_by_ell, cln_norms_by_ell)
+        phi_nlm = self.Bessel_function_expansion_of_rho_lm(rho_lm_r, lm_pairs, self.kln_nodes_by_ell, self.cln_norms_by_ell)
         end = time()
         print(f"Conversion from rho_lm(r) to rho_nlm completed in {end - start:.2f} seconds")
 
