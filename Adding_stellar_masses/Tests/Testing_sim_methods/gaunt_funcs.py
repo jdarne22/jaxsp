@@ -98,7 +98,7 @@ def precompute_gaunt_table(lm_l, lm_m, L_max_out, cache_dir=".", n_workers=64):
     return jnp.array(ai), jnp.array(aj), jnp.array(aG), jnp.array(aLf), unique_lm
 
 
-def compute_rho_lm_gaunt(aj_modes, R_modes, lm_l, lm_m, total_mass, time_step, dt, eigen_energies, parent_j,
+def compute_rho_lm_gaunt(aj_modes, R_modes, lm_l, lm_m, total_mass,
                           L_max_out=None, gaunt_table=None, batch_size=500_000):
     """
     Compute rho_LM(r) using Gaunt coefficients — no grid, no SHT.
@@ -140,8 +140,7 @@ def compute_rho_lm_gaunt(aj_modes, R_modes, lm_l, lm_m, total_mass, time_step, d
 
     # ── 1. aR[r,k] = a_k * R_k(r)  (time phase already baked into R_modes) ───
     # Keep on CPU so the accumulation loop below is cheap numpy ops
-    aR = np.array(R_modes, dtype=complex) * np.array(aj_modes, dtype=complex)[None, :] * np.exp(-1j * time_step * dt * np.array(eigen_energies[parent_j]) / hbar.value)[None, :]
-
+    aR = np.array(R_modes, dtype=complex) * np.array(aj_modes, dtype=complex)[None, :]
     # ── 2. F_{l,m}(r) = sum_{k:(l_k,m_k)=(l,m)} a_k R_k(r) ──────────────────
     # CPU numpy accumulation avoids N_unique un-JIT'd GPU ops
     lm_to_F = defaultdict(lambda: np.zeros(Nr, dtype=complex))
