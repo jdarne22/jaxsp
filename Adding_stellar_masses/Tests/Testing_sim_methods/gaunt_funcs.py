@@ -97,8 +97,25 @@ def precompute_gaunt_table(lm_l, lm_m, L_max_out, cache_dir=".", n_workers=64):
     print(f"  {len(ai):,} non-zero entries — saved to {cache_path}")
     return jnp.array(ai), jnp.array(aj), jnp.array(aG), jnp.array(aLf), unique_lm
 
+def make_scatter_matrix(lm_l, lm_m, unique_lm):
+    """
+    Returns a (N_unique, Nmodes) float32 matrix S where S[i, k] = 1
+    if unique_lm[i] == (lm_l[k], lm_m[k]), else 0.
+    F = S @ aR.T  gives F_{l,m}(r) as a (N_unique, Nr) matrix via one matmul.
+    """
+    lm_l = list(map(int, lm_l))
+    lm_m = list(map(int, lm_m))
+    lm_to_idx = {lm: i for i, lm in enumerate(unique_lm)}
+    N_unique = len(unique_lm)
+    Nmodes = len(lm_l)
+    S = np.zeros((N_unique, Nmodes), dtype=np.float64)
+    for k, (ell, m) in enumerate(zip(lm_l, lm_m)):
+        S[lm_to_idx[(ell, m)], k] = 1.0
+    return jnp.array(S)
 
-def compute_rho_lm_gaunt(aj_modes, R_modes, lm_l, lm_m, total_mass,
+
+
+def compute_rho_lm_gaunt(aj_modes, R_modes, lm_l, lm_m, total_mass, scatter_matrix,
                           L_max_out=None, gaunt_table=None, batch_size=500_000):
     """
     Compute rho_LM(r) using Gaunt coefficients — no grid, no SHT.
@@ -130,46 +147,29 @@ def compute_rho_lm_gaunt(aj_modes, R_modes, lm_l, lm_m, total_mass,
         Same indexing convention as s2fft.forward (mw sampling).
     """
     Nr, Nmodes = R_modes.shape
-    lm_l = list(map(int, lm_l))
-    lm_m = list(map(int, lm_m))
-    l_max = max(lm_l)
 
     if L_max_out is None:
-        L_max_out = 2 * l_max + 1
+        lm_l = list(map(int, lm_l))
+        L_max_out = 2 * max(lm_l) + 1
     N_flat = L_max_out * (2 * L_max_out - 1)
 
-    # ── 1. aR[r,k] = a_k * R_k(r)  (time phase already baked into R_modes) ───
-    # Keep on CPU so the accumulation loop below is cheap numpy ops
-    aR = np.array(R_modes, dtype=complex) * np.array(aj_modes, dtype=complex)[None, :]
-    # ── 2. F_{l,m}(r) = sum_{k:(l_k,m_k)=(l,m)} a_k R_k(r) ──────────────────
-    # CPU numpy accumulation avoids N_unique un-JIT'd GPU ops
-    lm_to_F = defaultdict(lambda: np.zeros(Nr, dtype=complex))
-    for k, (ell, m) in enumerate(zip(lm_l, lm_m)):
-        lm_to_F[(ell, m)] += aR[:, k]
+    # aR on GPU directly — no CPU transfer
+    aR = R_modes * aj_modes[None, :]   # (Nr, Nmodes), stays on GPU
 
-    # ── 3. Gaunt table (build once, reuse across time steps) ──────────────────
-    if gaunt_table is None:
-        gaunt_table = precompute_gaunt_table(lm_l, lm_m, L_max_out)
+    # F_{l,m}(r) via matmul instead of Python loop
+    F_jax = (scatter_matrix @ aR.T).T  # (Nr, N_unique)
 
+    # Unpack Gaunt table
     all_i, all_j, all_G, all_Lf, unique_lm = gaunt_table
     N_nz = len(all_i)
 
-    # F_jax[r, i] = F_{unique_lm[i]}(r)  on GPU — single CPU→GPU transfer
-    F_jax = jnp.array(np.stack([lm_to_F[lm] for lm in unique_lm], axis=1))  # (Nr, N_unique)
-
-    # ── 4. JIT-compiled batch accumulation on GPU ──────────────────────────────
-    # For each entry e:  weighted[e, r] = G_e * F_{l1,m1}(r) * conj(F_{l2,m2}(r))
-    # segment_sum groups by flat (L,M) index → (N_flat, Nr)
+    # JIT-compiled batch accumulation on GPU
     rho_flat = jnp.zeros((N_flat, Nr), dtype=complex)
-    n_batches = (N_nz + batch_size - 1) // batch_size
-    for b, start in enumerate(range(0, N_nz, batch_size)):
+    for start in range(0, N_nz, batch_size):
         end = min(start + batch_size, N_nz)
         rho_flat = rho_flat + _accum_batch(
             F_jax, all_i[start:end], all_j[start:end],
             all_G[start:end], all_Lf[start:end], N_flat,
         )
-        #print(f"\r  batch {b+1}/{n_batches}", end="", flush=True)
-    #print()
 
-    # ── 5. (N_flat, Nr).T → (Nr, L_max_out, 2*L_max_out-1) ───────────────────
     return total_mass * rho_flat.T.reshape(Nr, L_max_out, 2 * L_max_out - 1)

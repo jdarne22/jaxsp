@@ -1,16 +1,12 @@
-'''CODE FOR RUNNING TIME DEPENDENT STELLAR SIMULATIONS WITH JAXSP
-Method for finding acceleration vector:
-Add particle position to r_bins
-Re evaluate R_jk
-Get rho(r, theta, phi)
-S2FFT to rho_lm's
-Integrate to get r derivative of phi_lm's at particle position
-Put together with analytical solution for derivative of Y_lm's to get dPhi/dr, dPhi/dtheta, dPhi/dphi at particle position
-'''
 
+
+import functools
 
 from time import time
+
 import Stellar_sim_funcs as SSF
+
+import importlib
 
 import jaxsp as jsp
 
@@ -31,6 +27,11 @@ from scipy.special import sph_harm_y
 from collections import defaultdict
 
 import gaunt_funcs as gf
+
+from numpy import random
+
+importlib.reload(SSF)
+importlib.reload(gf)
 
 
 '''For Animations and plotting'''
@@ -90,7 +91,43 @@ def precompute_lm_pairs_Ylms(l):
     Y_lm = jnp.stack(Y_list, axis=0)  # (Nmodes, n_theta, n_phi), complex
 
 
-    return jnp.array(parent_j), Y_lm, lm_pairs
+    return jnp.array(parent_j), Y_lm, lm_pairs, jnp.array(lm_l), jnp.array(lm_m), theta, phi
+
+@functools.partial(jax.jit, static_argnums=(5,))
+def _compute_all_phi(rho_lm_updated, r_updated, output_lm_pairs, mask_int, mask_ext, L_max_out, G, particle_r):
+    """
+    Vmapped computation of dphi_dr and phi_lm for all (l,m) pairs.
+    All args are JAX arrays
+    """
+    Nr = rho_lm_updated.shape[0] - 1
+    dr     = jnp.diff(r_updated)
+    dr_rev = jnp.diff(r_updated[::-1])
+
+    def compute_phi_for_lm(lm_pair):
+        l_val = lm_pair[0]
+        m_val = lm_pair[1]
+        prefix = -4.0 * jnp.pi * G / (2 * l_val + 1)
+        m_ind  = m_val + L_max_out - 1
+
+        f_at_lm = rho_lm_updated[:, l_val, m_ind]
+
+        integrand_ext = r_updated ** (1 - l_val) * f_at_lm
+        integrand_int = r_updated ** (l_val + 2) * f_at_lm
+
+        avg_int = 0.5 * (integrand_int[1:] + integrand_int[:-1])
+        integral_int = jnp.sum(jnp.where(mask_int, avg_int * dr, 0.0 + 0.0j))
+
+        integrand_ext_rev = integrand_ext[::-1]
+        avg_ext = 0.5 * (integrand_ext_rev[1:] + integrand_ext_rev[:-1])
+        integral_ext = -jnp.sum(jnp.where(mask_ext, avg_ext * dr_rev, 0.0 + 0.0j))
+
+        dphi_lm_dr = prefix * (l_val * particle_r ** (l_val - 1) * integral_ext
+                            - (l_val + 1) * particle_r ** (-l_val - 2) * integral_int)
+        phi_lm  = prefix * (particle_r ** l_val * integral_ext
+                            + particle_r ** (-l_val - 1) * integral_int)
+        return dphi_lm_dr, phi_lm
+
+    return jax.vmap(compute_phi_for_lm)(output_lm_pairs)
 
 
 
@@ -126,27 +163,36 @@ class SimulationAnimator:
         self.X = R_grid * np.cos(Phi_grid)
         self.Y = R_grid * np.sin(Phi_grid)
 
-        # Frame storage
+        # Frame storage — particle_positions is now a list of lists (one per particle)
         self.density_frames = []
-        self.particle_positions = []
+        self.particle_positions = []   # list of frames; each frame is a list of (x,y,z) per particle
 
-    def store_frame(self, rho_rtp, particle_xyz):
-        """Capture one snapshot: equatorial density slice + particle position."""
-        # rho_rtp shape: (Nr, n_theta, n_phi)
+    def store_frame(self, rho_rtp, particle_xyz_list):
+        """
+        Capture one snapshot: equatorial density slice + all particle positions.
+
+        Parameters
+        ----------
+        rho_rtp : array (Nr, n_theta, n_phi)
+        particle_xyz_list : list of (x, y, z) Cartesian positions, one per particle
+        """
         rho_eq = np.array(np.real(rho_rtp[:, self.theta_eq_idx, :]))  # (Nr, n_phi)
         rho_eq = np.append(rho_eq, rho_eq[:, 0:1], axis=1)            # close phi: (Nr, n_phi+1)
         self.density_frames.append(rho_eq)
-        self.particle_positions.append([
-            float(particle_xyz[0]) * float(self.u.to_Kpc),
-            float(particle_xyz[1]) * float(self.u.to_Kpc),
-            float(particle_xyz[2]) * float(self.u.to_Kpc),
-        ])
+        frame_positions = [
+            [float(xyz[0]) * float(self.u.to_Kpc),
+             float(xyz[1]) * float(self.u.to_Kpc),
+             float(xyz[2]) * float(self.u.to_Kpc)]
+            for xyz in particle_xyz_list
+        ]
+        self.particle_positions.append(frame_positions)
 
     def create_animation(self, interval=200, save_path=None, orbit_radius_kpc=None):
         """
         Build a matplotlib FuncAnimation from the stored frames.
         X/Y axes are spatial coordinates in the equatorial plane (kpc).
         Z axis is the density value at each (x, y) point.
+        All particles are shown as individual scatter markers.
         """
 
         fig = plt.figure(figsize=(12, 9))
@@ -158,31 +204,41 @@ class SimulationAnimator:
         all_rho = np.concatenate([f.ravel() for f in self.density_frames])
         global_norm = Normalize(vmin=all_rho.min(), vmax=all_rho.max())
 
-        # Pre-convert positions once to avoid per-frame allocation
-        all_positions = np.array(self.particle_positions)
+        # Number of particles (inferred from first frame)
+        n_particles = len(self.particle_positions[0])
 
-        # Initial density surface: Z = rho(x, y)
+        # Pre-convert positions: shape (n_frames, n_particles, 3)
+        all_positions = np.array(self.particle_positions)  # (n_frames, n_particles, 3)
+
+        # Initial density surface
         rho0 = self.density_frames[0]
         surf = [ax.plot_surface(self.X, self.Y, rho0,
                                 cmap=cmap, norm=global_norm, shade=False, alpha=0.85)]
 
-        # Particle marker — projected to z=0 in plot space (particle lives in xy-plane)
-        p0 = self.particle_positions[0]
-        particle_dot = ax.scatter([p0[0]], [p0[1]], [0.0],
-                                  color='lime', s=80, zorder=5,
-                                  edgecolors='white', linewidths=0.5,
-                                  depthshade=False)
+        # One scatter marker per particle
+        colors = plt.cm.Set1(np.linspace(0, 1, n_particles))
+        particle_dots = []
+        for i in range(n_particles):
+            p0 = self.particle_positions[0][i]
+            dot = ax.scatter([p0[0]], [p0[1]], [0.0],
+                             color=colors[i], s=80, zorder=5,
+                             edgecolors='white', linewidths=0.5,
+                             depthshade=False)
+            particle_dots.append(dot)
 
-        # Orbit trail projected to z=0
-        trail_line, = ax.plot([p0[0]], [p0[1]], [0.0],
-                              color='lime', alpha=0.5, linewidth=1)
+        # Orbit trails per particle
+        trail_lines = []
+        for i in range(n_particles):
+            p0 = self.particle_positions[0][i]
+            line, = ax.plot([p0[0]], [p0[1]], [0.0],
+                            color=colors[i], alpha=0.5, linewidth=1)
+            trail_lines.append(line)
 
         # Axis limits
         if orbit_radius_kpc is not None:
             xy_lim = orbit_radius_kpc * 1.3
         else:
-            all_pos = np.array(self.particle_positions)
-            xy_lim = np.max(np.abs(all_pos[:, :2])) * 1.3
+            xy_lim = np.max(np.abs(all_positions[:, :, :2])) * 1.3
         ax.set_xlim(-xy_lim, xy_lim)
         ax.set_ylim(-xy_lim, xy_lim)
         ax.set_xlabel(r'$x$ [kpc]')
@@ -199,17 +255,18 @@ class SimulationAnimator:
             surf[0] = ax.plot_surface(self.X, self.Y, rho,
                                       cmap=cmap, norm=global_norm, shade=False, alpha=0.85)
 
-            pos = self.particle_positions[frame]
-            particle_dot._offsets3d = ([pos[0]], [pos[1]], [0.0])
-
-            trail_line.set_data(all_positions[:frame + 1, 0], all_positions[:frame + 1, 1])
-            trail_line.set_3d_properties(np.zeros(frame + 1))
+            for i in range(n_particles):
+                pos = self.particle_positions[frame][i]
+                particle_dots[i]._offsets3d = ([pos[0]], [pos[1]], [0.0])
+                trail_lines[i].set_data(all_positions[:frame + 1, i, 0],
+                                        all_positions[:frame + 1, i, 1])
+                trail_lines[i].set_3d_properties(np.zeros(frame + 1))
 
             title.set_text(f'Time step: {frame + 1}')
-            return surf[0], particle_dot, trail_line
+            return [surf[0]] + particle_dots + trail_lines
 
         import matplotlib
-        matplotlib.rcParams['animation.embed_limit'] = 2**128
+        matplotlib.rcParams['animation.embed_limit'] = 2**10
 
         ani = mpl_animation.FuncAnimation(fig, update,
                                           frames=len(self.density_frames),
@@ -229,26 +286,137 @@ class SimulationAnimator:
 #--------------------------------------------------------------------------------------------------------------------
 
 
+class Simulation_Particle:
+    """
+    Stores the state (position + velocity) and history for a single stellar particle.
+    """
+
+    def __init__(self, particle_id, init_pos_cart, init_vel_cart, u):
+
+        self.id = particle_id
+        self.u = u
+
+        # Current Cartesian state
+        self.r_pos = jnp.array(init_pos_cart)   # (3,)
+        self.v     = jnp.array(init_vel_cart)    # (3,)
+
+        # Convert to spherical for initial record
+        self.r_pos_sph = SSF.Cartesian_to_sph(
+            self.r_pos[0], self.r_pos[1], self.r_pos[2]
+        )
+        self.v_sph = SSF.Cartesian_to_sph_vel(
+            self.r_pos[0], self.r_pos[1], self.r_pos[2],
+            self.v[0],     self.v[1],     self.v[2]
+        )
+
+        # History buffers (same structure as original StellarSimTDep)
+        self.velocities     = [self.v_sph]
+        self.stellar_v_disp = [0]
+        self.r_values       = [float(self.r_pos_sph[0])]
+        self.average_r      = [float(self.r_pos_sph[0])]
+        self.positions_xyz  = [[float(self.r_pos[0]),
+                                 float(self.r_pos[1]),
+                                 float(self.r_pos[2])]]
+        self.time_step = 0
+
+    def update_state(self, new_pos_cart, new_vel_cart):
+        """
+        Called after each rebound integration step to update this particle's
+        Cartesian and spherical state and append to history arrays.
+
+        """
+        self.r_pos = jnp.array(new_pos_cart)
+        self.v     = jnp.array(new_vel_cart)
+
+        self.r_pos_sph = SSF.Cartesian_to_sph(
+            self.r_pos[0], self.r_pos[1], self.r_pos[2]
+        )
+        self.v_sph = SSF.Cartesian_to_sph_vel(
+            self.r_pos[0], self.r_pos[1], self.r_pos[2],
+            self.v[0],     self.v[1],     self.v[2]
+        )
+
+        self.velocities.append(self.v_sph)
+        velocities_arr = jnp.array(self.velocities)
+        new_vel_disp = (
+            jnp.std(velocities_arr[:, 0])**2
+            + jnp.std(velocities_arr[:, 1])**2
+            + jnp.std(velocities_arr[:, 2])**2
+        ) ** 0.5
+        self.stellar_v_disp.append(new_vel_disp)
+
+        R = float(self.r_pos_sph[0])
+        self.r_values.append(R)
+        self.positions_xyz.append([float(self.r_pos[0]),
+                                    float(self.r_pos[1]),
+                                    float(self.r_pos[2])])
+        self.time_step += 1
+
+
+#--------------------------------------------------------------------------------------------------------------------
+
 
 class StellarSimTDep:
 
-    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, static, frozen,
+    '''
+    Stellar simulation which controls how everything is done and calls the particle
+    class to update particle states.
+    Methodology:
+
+    Initialise simulation - construct wavefunctions using jaxsp, construct eigenenergies and l values
+    Make rho consistent with the total mass of LeoII, setup particle IC (position and vel dir), create persistent simulation
+    which calls the force function at each microstep
+
+    Setup - Precompute number of radial bins for insertion indices later, Pre compute Gaunt table and scatter matrix for rho_lm construction
+    Precompute Q_j_tp for SphHT method, create phased wavefunctions (in this case the phase is fixed at exp(-i E_j * t / hbar)
+
+    Get rho_lms - For s2fft call constructing rho_rtp and then call forward s2fft, for gaunt, call construct_rho_lms which does the summation over j and 
+    l', m' using the precomputed Gaunt table and scatter matrix. If static, set all l > 0 modes to zero. Expands up to L_max_out = 2L - 1
+
+    Calculate v_corrected - Use batched acceleration pipeline to get accelerations for each particles position, make these related to the magnitude 
+    of the velocities |v| = sqrt(a_r*r) but keep direction same as in initialising simulation
+
+    Main loop - Continue to run function timestep_particle until we reach the number of timesteps initially set. This function writes particle states (pos and vel) 
+    to rebound sim, calls the integrator which in turn, calls the force function inside the simulation multiple times to get acc vector for each microstep and 
+    advance the particles, then reads the new particle states and updates the particle class.
+
+    Forces Function: 
+
+    Force function is called at every microstep of each macro timestep for ias15.
+    It collects all the current particle positions
+    Then it runs construct_acc_batch (the main function)
+    Construct_acc_batch then calls _compute_radial_batch_jit which is a jax.jit version of _compute_radial_batch.
+    This then calculates the wavefunctions at the positions of each of the particles and multiplies it by the current phase (constant)
+    Then it runs a vmap over _construct_acc_radial - this computes the rho_lms at each particle position depending on whether its static/frozen or SphHT/Gaunt
+    It inserts r and the rho_lm's into the correct index and runs _compute_all_phi
+    _compute_all_phi is a jax.jit function which vmaps over all lm pairs to calculate the integrals for dphi_lm/dr and phi_lm evaluated at the particle r positions
+    Then it takes all particle thetas and phis to construct the spherical harmonics at the positions of the particles up to 2L-1
+    Runs _combine_acc_jit, the jit version of _combine_acc, a static function which contracts the radial and angular parts to get the accelerations at the positions 
+    of each particle
+
+    Reason for this setup: can jax jit and jax vmap over alot of things, however, sph_harm function isnt jax compatible therefore need to have it separate
+    (in main function construct_acc_batch)
+    '''
+
+    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, static, frozen, SphHT, integrator,
                  animate=False, animate_every=1):
 
-
-        self.velocities = []
         self.stellar_v_disp = []
         self.average_r = []
-        self.r_values = []
-        self.positions_xyz = []
         self.time_step = 0
         self.static = static
         self.frozen = frozen
+        self.SphHT = SphHT
+        self.integrator = integrator
+
 
         self.m22 = m22
         self.u = jsp.set_schroedinger_units(self.m22)
 
         self.no_of_particles = no_of_particles
+
+        # List of Simulation_Particle instances — populated in initialising_simulation()
+        self.particles = []
 
         self.r_half = r_half
         self.no_time_steps = no_time_steps
@@ -271,17 +439,12 @@ class StellarSimTDep:
 
         self.current_phase = None   # exp(-i E_j * t / hbar), shape (Nj,)
         self.R_j_r_phased = None    # R_j_r_fixed * current_phase,  shape (Nr, Nj)
-        self.eigen_energies = None  # stored from eigenstate_lib 
-        self.lm_pairs_np = None     # numpy copy of lm_pairs – avoids GPU to CPU 
+        self.eigen_energies = None  # stored from eigenstate_lib
+        self.lm_pairs_np = None     # numpy copy of lm_pairs – avoids GPU to CPU
 
 
-    def first_time_step(self):
+    def initialising_simulation(self):
 
-        '''Complete the first timestep using the static potential provided by the Jaxsp tutorial code.
-        This is the wavefunction reconstructed potential.
-
-        Set up the Hanno Reins rebound simulation for later time stepping and orbit integration
-        '''
 
         cNFWtides_params = jnp.array([
         357964808.148399 * self.u.from_Msun,
@@ -309,6 +472,7 @@ class StellarSimTDep:
         eigenstate_lib = jsp.init_eigenstate_library(potential_params, rmin, rmax, a, b, N)
 
         l = eigenstate_lib.radial_eigenmode_params.l
+        self.l = l
 
         print('l max from jaxsp:', max(l))
         L = int(max(l) + 1)
@@ -321,7 +485,6 @@ class StellarSimTDep:
         r = jnp.logspace(jnp.log10(self.rmin), jnp.log10(self.rmax), self.no_radius_bins)
         self.r = r
 
-        rho_psi = jax.vmap(jsp.rho_psi, in_axes=(0,None,None))
 
         tol = 1e-7
         wavefunction_params = jsp.init_wavefunction_params(eigenstate_lib, density_params, rmin, rmax, tol)
@@ -331,127 +494,175 @@ class StellarSimTDep:
         aj_2 = wavefunction_params.aj_2        # shape (Nj,)
         rand_phase = jax.random.uniform(jax.random.PRNGKey(0), shape=aj_2.shape, minval=0.0, maxval=2 * jnp.pi,)
         aj = jnp.sqrt(aj_2) * jnp.exp(1j * rand_phase)  # shape (Nj,)
-        eigen_energies = eigenstate_lib.radial_eigenmode_params.E  # shape (Nj,)
         self.eigen_energies = eigenstate_lib.radial_eigenmode_params.E
 
         R_j_r = eval_library(self.r, eigenstate_lib.radial_eigenmode_params)  # (Nr, Nj)
         self.R_j_r_fixed = R_j_r
 
-        rho_psi_vals = rho_psi(r, wavefunction_params, eigenstate_lib)
+        phase = jnp.exp(-1j * self.eigen_energies * 1 * self.dt / hbar.value)
+        R_j_r_phased = self.R_j_r_fixed * phase[None, :]
 
-        Phi_psi = SSF.Obtain_pot(self.rmin, self.rmax, rho_psi_vals, r)
+        parent_j, Y_lm, lm_pairs, lm_l_per_mode, lm_m_per_mode, theta, phi = precompute_lm_pairs_Ylms(l)
+        self.parent_j = parent_j
+        self.lm_l = lm_pairs[:, 0]        # unique pairs — used for Gaunt table
+        self.lm_m = lm_pairs[:, 1]
+        self.lm_l_per_mode = lm_l_per_mode  # one per mode — used for scatter matrix
+        self.lm_m_per_mode = lm_m_per_mode
+        self.theta = theta
+        self.phi = phi
+        
+        # Constructing initial conditions based on Andrew paper
 
         r_orbit = self.r_half * self.u.from_Kpc
 
-        init_pos = jnp.array([r_orbit, 0, 0]) #Starting as position (r_vir, 0, 0) = (x, y, z)
 
-        acc_mag = SSF.Find_acc_mag_from_Phi(r, Phi_psi, r_orbit)
+        rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
 
-        acc_vec = acc_mag * (-init_pos / jnp.linalg.norm(init_pos))
-        init_vel = jnp.sqrt(acc_mag * r_orbit) * jnp.array([0, 1, 0])  # Circular orbit velocity (x, y, z)
+        M_enc = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, r_orbit)
 
-        init_vel_sph = SSF.Cartesian_to_sph_vel(init_pos[0], init_pos[1], init_pos[2], init_vel[0], init_vel[1], init_vel[2])
 
-        self.velocities.append(init_vel_sph)
-        self.stellar_v_disp.append(0)
-        self.average_r.append(r_orbit)
-        self.r_values.append(r_orbit)
-        self.positions_xyz.append([float(init_pos[0]), float(init_pos[1]), float(init_pos[2])])
+        M_enc_tot = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, self.rmax)
 
-        sim = rebound.Simulation()
-        sim.integrator = "ias15"
-        sim.add(m=0.0, x=init_pos[0], y=init_pos[1], z=init_pos[2],
-                vx=init_vel[0], vy=init_vel[1], vz=init_vel[2])
+        print(f"Total enclosed mass at rmax: {M_enc_tot:.3e}")
+        print(f"Total mass from wavefunction: {total_mass:.3e}")
 
-        ps = sim.particles
+        multiply_factor = total_mass / M_enc_tot
 
-        def additional_forces_init(_reb_sim):
-            p = ps[0]
-            p.ax += acc_vec[0]
-            p.ay += acc_vec[1]
-            p.az += acc_vec[2]
+        print(f"Scaling density and mass by factor {multiply_factor} to match total mass")
 
-        sim.additional_forces = additional_forces_init
-        sim.integrate(self.dt)
+        self.total_mass *= multiply_factor
 
-        p = sim.particles[0]
-        r_pos = jnp.array([p.x, p.y, p.z])
-        v = jnp.array([p.vx, p.vy, p.vz])
-        self.r_pos = r_pos
-        self.v = v
+        M_enc *= multiply_factor
 
-        r_pos_sph = SSF.Cartesian_to_sph(r_pos[0], r_pos[1], r_pos[2])
-        v_sph = SSF.Cartesian_to_sph_vel(r_pos[0], r_pos[1], r_pos[2], v[0], v[1], v[2])
 
-        self.update_summary_stats(v_sph, r_pos_sph)
+        #------------------------------------------------------------------
+        # SIMULATION
 
-        self.r_pos_sph = r_pos_sph
-        self.v_sph = v_sph
-
-        #Create persistent rebound simulation for time stepping
         sim_step = rebound.Simulation()
-        sim_step.integrator = "ias15"
-        # Gravitational force is velocity-independent: IAS15 can skip redundant
-        # force evaluations at sub-steps where only the velocity differs.
-        sim_step.force_is_velocity_dependent = False
-        sim_step.ri_ias15.min_dt = self.dt * 1e-6  # prevent infinite subdivision
-        sim_step.add(m=0.0, x=r_pos[0], y=r_pos[1], z=r_pos[2], vx=v[0], vy=v[1], vz=v[2])
+
+
+        if self.integrator == 'ias15':
+        
+            sim_step.integrator = "ias15"
+            sim_step.force_is_velocity_dependent = False
+            sim_step.ri_ias15.min_dt = self.dt
+            sim_step.ri_ias15.epsilon = 1e-9
+        
+        elif self.integrator == 'leapfrog':
+
+            sim_step.integrator = "leapfrog"
+            sim_step.dt = self.dt
+
+
+        self.particles = []
+        for i in range(self.no_of_particles):
+
+            X1 = random.normal()
+            X2 = random.normal()
+            X3 = random.normal()
+
+            mag = jnp.sqrt(X1**2 + X2**2 + X3**2)
+
+            r_i = r_orbit * jnp.array([X1, X2, X3]) / mag
+
+            r_i_unit = r_i / r_orbit
+
+            #avoid degeneracy near z-axis
+            ref = jnp.where(jnp.abs(r_i_unit[2]) < 0.9, 
+                            jnp.array([0., 0., 1.]), 
+                            jnp.array([1., 0., 0.]))
+            o_i_unit = jnp.cross(r_i_unit, ref)
+            o_i_unit = o_i_unit / jnp.linalg.norm(o_i_unit)
+
+
+            t_i_unit = jnp.cross(r_i_unit, o_i_unit)
+
+            b_i_unit = jnp.cross(t_i_unit, r_i_unit)
+
+            rand_theta = random.uniform(0.0, 2 * jnp.pi)
+
+            v_i_unit = t_i_unit * jnp.sin(rand_theta) + b_i_unit * jnp.cos(rand_theta)
+
+            v_circ = jnp.sqrt(self.G * M_enc / r_orbit) * v_i_unit
+
+            init_pos = r_i
+
+            init_vel = v_circ
+
+            #print(f"Particle {i}: v_circ = {init_vel * self.u.to_kms} km/s")
+
+            particle = Simulation_Particle(i, init_pos, init_vel, self.u)
+            self.particles.append(particle)
+
+            sim_step.add(
+                m=0.0,
+                x=float(init_pos[0]), y=float(init_pos[1]), z=float(init_pos[2]),
+                vx=float(init_vel[0]), vy=float(init_vel[1]), vz=float(init_vel[2])
+            )
+
         ps_step = sim_step.particles
 
         autodiff_data = {'eval_library': eval_library, 'eigenstate_lib': eigenstate_lib}
         self.autodiff_data = autodiff_data
 
 
+        self._force_call_count = 0
+
         def additional_forces_step(_reb_sim):
             """
             IAS15 calls this multiple times per timestep at different positions.
+            All particle accelerations are computed in a single batched JAX call
+            (vmap over the radial integrals + one vectorised scipy angular call),
+            then written back to each rebound particle.
             """
-            p = ps_step[0]
-            pos_sph = SSF.Cartesian_to_sph(p.x, p.y, p.z)
+            # Collect all current positions into a single JAX array (N, 3)
+            positions_sph = jnp.array([
+                SSF.Cartesian_to_sph(ps_step[i].x, ps_step[i].y, ps_step[i].z)
+                for i in range(self.no_of_particles)
+            ])
 
-            a_r, a_theta, a_phi = self.construct_acc(
-                pos_sph,
+            self._force_call_count += 1
+            
+
+            # Single batched acceleration computation — parallel over all particles
+            a_r_all, a_theta_all, a_phi_all = self.construct_acc_batch(
+                positions_sph,
                 self.autodiff_data['eval_library'],
                 self.autodiff_data['eigenstate_lib']
             )
 
-            ax, ay, az = SSF.acceleration_spherical_to_cartesian(a_r, a_theta, a_phi, pos_sph[1], pos_sph[2])
-            p.ax += float(ax)
-            p.ay += float(ay)
-            p.az += float(az)
+            # Write accelerations back to rebound particles
+            for i in range(self.no_of_particles):
+                pos_sph = positions_sph[i]
+                ax, ay, az = SSF.acceleration_spherical_to_cartesian(
+                    a_r_all[i], a_theta_all[i], a_phi_all[i], pos_sph[1], pos_sph[2]
+                )
+                ps_step[i].ax += float(ax)
+                ps_step[i].ay += float(ay)
+                ps_step[i].az += float(az)
 
         sim_step.additional_forces = additional_forces_step
 
         self.sim_step = sim_step
         self.ps_step = ps_step
 
-        return eval_library, eigenstate_lib, aj, l
+        return aj, Y_lm
 
 
-    def update_summary_stats(self, vel, r_vec):
+    def construct_rho_rtp(self, R_j_r_phased, aj, parent_j, Y_lm):
 
-        '''Plotted stats from simulation updated after each timestep
-        '''
+        R_modes = R_j_r_phased[:, parent_j]  # (Nr, Nmodes)
+        aj_modes = aj[parent_j]  # (Nmodes,)
 
-        self.velocities.append(vel)
+        full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm)
 
-        velocities_arr = jnp.array(self.velocities)
-        new_vel_disp = (jnp.std(velocities_arr[:, 0])**2 + jnp.std(velocities_arr[:, 1])**2 + jnp.std(velocities_arr[:, 2])**2)**0.5
-        self.stellar_v_disp.append(new_vel_disp)
+        psi_abs2 = jnp.abs(full_psi_rtp) ** 2
+        rho_rtp = self.total_mass * psi_abs2
 
-
-        self.r_values.append(r_vec[0])
-
-        new_avg_r = jnp.mean(jnp.array(self.r_values))
-        self.average_r.append(new_avg_r)
-
-        self.positions_xyz.append([float(self.r_pos[0]), float(self.r_pos[1]), float(self.r_pos[2])])
-
-        self.time_step += 1
+        return rho_rtp
 
 
-
-    def construct_frozen_rho_lms(self, aj, parent_j, R_j_r_phased):
+    def construct_rho_lms(self, aj, parent_j, R_j_r_phased):
 
         # Use precomputed R_j_r_phased (set once per macro timestep in run_simulation)
         # to avoid recomputing exp(-i E t / hbar) on every call.
@@ -463,7 +674,15 @@ class StellarSimTDep:
         aj_modes, R_modes, self.lm_l, self.lm_m, self.total_mass,
         L_max_out=self.L_max_out,
         gaunt_table=self.gaunt_table,
+        scatter_matrix=self.scatter_matrix,
         )
+
+        if self.static == True:
+            # set all l > 0 modes to zero
+            #jnp.where - where condition, rho_lm_gaunt, otherwise 0
+            l_inds = jnp.arange(rho_lm_gaunt.shape[1])
+            m_inds = jnp.arange(rho_lm_gaunt.shape[2])
+            rho_lm_gaunt = jnp.where((l_inds[None, :, None] == 0) & (m_inds[None, None, :] == self.L_max_out - 1), rho_lm_gaunt, 0.0 + 0.0j)
 
         return rho_lm_gaunt
 
@@ -475,230 +694,319 @@ class StellarSimTDep:
 
         #Parallel forward SHT over all radii
         def forward_sht_single_r(rho_at_r):
-            return s2fft.forward(rho_at_r, self.L, sampling='mw', method='jax')
+            return s2fft.forward(rho_at_r, self.L_max_out, sampling='mw', method='jax')
 
         flm_r = jax.vmap(forward_sht_single_r)(rho_rtp)  # (Nr, L, 2*L-1)
 
+        if self.static == True:
+            # set all l > 0 modes to zero
+            #jnp.where - where condition, rho_lm_gaunt, otherwise 0
+            l_inds = jnp.arange(flm_r.shape[1])
+            m_inds = jnp.arange(flm_r.shape[2])
+            flm_r = jnp.where((l_inds[None, :, None] == 0) & (m_inds[None, None, :] == self.L_max_out - 1), flm_r, 0.0 + 0.0j)
+
         return flm_r
-    
 
 
 
+    def _construct_acc_radial(self, r_pos_sph, R_j_at_particle_phased):
+        """
+        Pure-JAX portion of the acceleration computation.  R_j has already been
+        evaluated (via eval_library) and phased before this is called, so this
+        method is safe to vmap over a batch of particle positions.
 
-    def construct_acc(self, r_pos_sph, eval_library, eigenstate_lib):
+        """
+        particle_r = r_pos_sph[0]
 
-        '''Construct the acceleration vector at the particle position.
-        '''
+        if self.SphHT == False:
+            # construct_rho_lms expects shape (Nr, Nj); wrap the single-radius row
+            R_j_row = R_j_at_particle_phased[None, :]                     # (1, Nj)
+            rho_lm_at_particle = self.construct_rho_lms(self.aj, self.parent_j, R_j_row)[0]
 
-        particle_r     = r_pos_sph[0]
-        particle_theta = r_pos_sph[1]
-        particle_phi   = r_pos_sph[2]
+            if self.static == True:
+                # set all l > 0 modes to zero
+                #[N, l, 2l+1]
 
-        if self.frozen:
-            R_j_at_particle = eval_library(jnp.array([particle_r]), eigenstate_lib.radial_eigenmode_params)[:, self.parent_j]  # (1, Nmodes)
-            R_j_at_particle_phased = R_j_at_particle * self.current_phase[self.parent_j]  # (1, Nmodes)
-            rho_lm_at_particle = self.construct_frozen_rho_lms(self.aj, self.parent_j, R_j_at_particle_phased)  # (L, 2*L-1)
-
-
-
-        Nr = len(self.r)        # number of background radial bins
-        all_idx = jnp.arange(Nr + 1)   # indices 0 .. Nr 
+                l_inds = jnp.arange(rho_lm_at_particle.shape[0])
+                m_inds = jnp.arange(rho_lm_at_particle.shape[1])
+                rho_lm_at_particle = jnp.where((l_inds[:, None] == 0) & (m_inds[None, :] == self.L_max_out - 1), rho_lm_at_particle, 0.0 + 0.0j)
 
 
-        insert_idx = jnp.searchsorted(self.r, particle_r)  # index where particle_r would be inserted to keep r sorted
+        else:
+            
+            psi_at_r  = jnp.einsum('j,jtp->tp', R_j_at_particle_phased, self.Q_j_tp)
+            rho_at_r  = self.total_mass * jnp.abs(psi_at_r) ** 2
+            rho_lm_at_particle = s2fft.forward(rho_at_r, self.L_max_out, sampling='mw', method='jax')
 
-        r_below = jnp.concatenate([self.r, self.r[-1:]])    # (Nr+1,)
-        r_above = jnp.concatenate([self.r[:1], self.r])     # (Nr+1,)
+            if self.static == True:
+                # set all l > 0 modes to zero
+                #[N, l, 2l+1]
 
-        r_updated = jnp.where(                  # jnp.where(cond, x, y) returns x if cond is True, else y
-            all_idx < insert_idx,
-            r_below,
-            jnp.where(all_idx == insert_idx, particle_r, r_above)
-        )   # (Nr+1,)
+                l_inds = jnp.arange(rho_lm_at_particle.shape[0])
+                m_inds = jnp.arange(rho_lm_at_particle.shape[1])
+                rho_lm_at_particle = jnp.where((l_inds[:, None] == 0) & (m_inds[None, :] == self.L_max_out - 1), rho_lm_at_particle, 0.0 + 0.0j)
 
-        # Insert the particle's rho_lm into the flm_r array at the correct radial index, shifting other entries as needed.
 
-        rho_lm_below = jnp.concatenate([self.rho_lms, self.rho_lms[-1:]], axis=0)    # (Nr+1, L, 2L-1)
-        rho_lm_above = jnp.concatenate([self.rho_lms[:1], self.rho_lms], axis=0)     # (Nr+1, L, 2L-1)
+        insert_idx = jnp.searchsorted(self.r, particle_r)
+
+        r_updated = jnp.where(
+            self.all_idx < insert_idx,
+            self.r_below,
+            jnp.where(self.all_idx == insert_idx, particle_r, self.r_above)
+        )
 
         rho_lm_updated = jnp.where(
-            all_idx[:, None, None] < insert_idx,
-            rho_lm_below,
+            self.all_idx[:, None, None] < insert_idx,
+            self.rho_lms_below,
             jnp.where(
-                all_idx[:, None, None] == insert_idx,
+                self.all_idx[:, None, None] == insert_idx,
                 rho_lm_at_particle[None, :, :],
-                rho_lm_above
+                self.rho_lms_above
             )
-        )   # (Nr+1, L, 2L-1)
-
-
-        r_index = insert_idx
-
-        dr     = jnp.diff(r_updated)          
-        dr_rev = jnp.diff(r_updated[::-1])    
-
-        # Masks reused by every (l,m) pair in the vmap below.
-        mask_int = jnp.arange(Nr) < r_index               # True for indices 0 .. r_index-1
-        mask_ext = jnp.arange(Nr) < (Nr - r_index)   # True for indices 0 .. self.Nr-r_index-1 in the reversed array, i.e. r_index+1 .. self.Nr in the forward array
-
-        def compute_phi_for_lm(lm_pair):
-            l_val = lm_pair[0]
-            m_val = lm_pair[1]
-
-            prefix = -4.0 * jnp.pi * self.G / (2 * l_val + 1)
-            m_ind  = m_val + self.L_max_out - 1  # flm_r m-axis has size 2*L_max_out-1
-
-            f_at_lm = rho_lm_updated[:, l_val, m_ind]
-
-            integrand_ext = r_updated ** (1 - l_val) * f_at_lm
-            integrand_int = r_updated ** (l_val + 2) * f_at_lm
-
-            avg_int = 0.5 * (integrand_int[1:] + integrand_int[:-1])   # (Nr,)
-
-            # Internal integral at r_index: masked sum over first r_index intervals.
-            integral_int = jnp.sum(jnp.where(mask_int, avg_int * dr, 0.0 + 0.0j))
-
-            # External integral at r_index: masked sum over intervals from r_max down.
-            integrand_ext_rev = integrand_ext[::-1]
-            avg_ext = 0.5 * (integrand_ext_rev[1:] + integrand_ext_rev[:-1])   # (Nr,)
-            integral_ext = -jnp.sum(jnp.where(mask_ext, avg_ext * dr_rev, 0.0 + 0.0j))
-
-            r_val = particle_r
-
-            dphi_dr = prefix * (l_val * r_val ** (l_val - 1) * integral_ext - (l_val + 1) * r_val ** (-l_val - 2) * integral_int)
-
-            phi_lm = prefix * (r_val ** l_val * integral_ext + r_val ** (-l_val - 1) * integral_int)
-
-            return dphi_dr, phi_lm
-
-
-        # vmap over all (l,m) pairs to get straight to dphi_lm_dr and phi_lm both evaluated at the r value of the particle
-        dphi_dr_at_r, phi_lm_at_r = jax.vmap(compute_phi_for_lm)(self.output_lm_pairs)
-
-
-        # Generate spherical harmonics and their derivatives at theta and phi of particle
-        Ylm_particle, dY_arr = sph_harm_y(
-            self.lm_pairs_np[:, 0], self.lm_pairs_np[:, 1],
-            float(particle_theta), float(particle_phi),
-            diff_n=1
         )
-        Ylm_particle = jnp.array(Ylm_particle)
-        dY_dtheta    = jnp.array(dY_arr[:, 0])
 
-        dY_dphi = 1j * self.output_lm_pairs[:, 1] * Ylm_particle
+        mask_int = jnp.arange(self.Nr) < insert_idx
+        mask_ext = jnp.arange(self.Nr) < (self.Nr - insert_idx)
 
-        # Sum over all (l,m) modes to get scalar acceleration components
-        a_r     = jnp.sum(-dphi_dr_at_r * Ylm_particle).real
-        a_theta = jnp.sum(-phi_lm_at_r * dY_dtheta / particle_r).real
-        a_phi   = jnp.sum(-phi_lm_at_r * dY_dphi / (particle_r * jnp.sin(particle_theta))).real
+        dphi_lm_dr_at_r, phi_lm_at_r = _compute_all_phi(
+            rho_lm_updated, r_updated, self.output_lm_pairs,
+            mask_int, mask_ext, int(self.L_max_out), self.G, particle_r
+        )
+
+        return dphi_lm_dr_at_r, phi_lm_at_r  # (Nmodes,), (Nmodes,)
+
+    def _compute_radial_batch(self, positions_sph, current_phase, radial_eigenmode_params):
+        """JIT-compilable: radial basis evaluation + vmap over _construct_acc_radial.
+
+        current_phase and radial_eigenmode_params are passed explicitly so JAX
+        traces them as dynamic values (they change between macro timesteps).
+        eval_library is accessed via self._eval_library, captured as a static
+        closure constant since it never changes after setup.
+        """
+        particle_rs = positions_sph[:, 0]                                      # (N_particles,)
+        R_j_at_particles = self._eval_library(particle_rs, radial_eigenmode_params)
+        # R_j_at_particles : (N_particles, Nj)
+
+        R_j_phased_all = R_j_at_particles * current_phase[None, :]             # (N_particles, Nj)
+
+        dphi_dr_all, phi_lm_all = jax.vmap(
+            lambda pos, R_j_phased: self._construct_acc_radial(pos, R_j_phased)
+        )(positions_sph, R_j_phased_all)
+        # dphi_dr_all : (N_particles, Nmodes)
+        # phi_lm_all  : (N_particles, Nmodes)
+
+        return dphi_dr_all, phi_lm_all
+
+    @staticmethod
+    def _combine_acc(dphi_lm_dr_all, phi_lm_all, Ylm_all, dY_dtheta, dY_dphi, particle_r, particle_theta):
+        """JIT-compilable: contract radial outputs with angular terms to get accelerations."""
+        dphi_lm_dr_T = dphi_lm_dr_all.T   # (Nmodes, N_particles)
+        phi_lm_T  = phi_lm_all.T   # (Nmodes, N_particles)
+
+        a_r     = jnp.sum(-dphi_lm_dr_T * Ylm_all, axis=0).real                                                      # (N_particles,)
+        a_theta = jnp.sum(-phi_lm_T  * dY_dtheta / particle_r[None, :], axis=0).real                             # (N_particles,)
+        a_phi   = jnp.sum(-phi_lm_T  * dY_dphi   / (particle_r[None, :] * jnp.sin(particle_theta[None, :])), axis=0).real  # (N_particles,)
 
         return a_r, a_theta, a_phi
 
+    def construct_acc_batch(self, positions_sph, eval_library, eigenstate_lib):
+
+        # Lazy JIT compilation on first call — compiles once, reused for all ~110
+        # IAS15 sub-steps per macro timestep and across all subsequent timesteps.
+        if not hasattr(self, '_compute_radial_batch_jit'):
+            self._eval_library = eval_library
+            self._compute_radial_batch_jit = jax.jit(self._compute_radial_batch)
+            self._combine_acc_jit = jax.jit(StellarSimTDep._combine_acc)
+
+        # JIT-compiled radial part 
+        dphi_lm_dr_at_r, phi_lm_at_r = self._compute_radial_batch_jit(
+            positions_sph,
+            self.current_phase,
+            eigenstate_lib.radial_eigenmode_params,
+        )
+
+        # Scipy angular part: cannot be JIT-compiled 
+        thetas = np.array(positions_sph[:, 1])   # (N_particles,)
+        phis   = np.array(positions_sph[:, 2])   # (N_particles,)
+
+        Ylm_all, dY_all = sph_harm_y(
+            self.lm_pairs_np[:, 0, None],   # (Nmodes, 1) — broadcast over particles
+            self.lm_pairs_np[:, 1, None],
+            thetas[None, :],                # (1, N_particles)
+            phis[None, :],
+            diff_n=1
+        )
+        # Ylm_all : (Nmodes, N_particles),  dY_all : (Nmodes, N_particles, 1)
+        Ylm_all   = jnp.array(Ylm_all)
+        dY_dtheta = jnp.array(dY_all[:, :, 0])
+
+        m_vals  = self.output_lm_pairs[:, 1, None]  # (Nmodes, 1)
+        dY_dphi = 1j * m_vals * Ylm_all             # (Nmodes, N_particles)
+
+        # JIT-compiled final contraction
+        return self._combine_acc_jit(
+            dphi_lm_dr_at_r, phi_lm_at_r, Ylm_all, dY_dtheta, dY_dphi,
+            positions_sph[:, 0], positions_sph[:, 1],
+        )
+
+
     def time_step_particle(self):
+        """
+        Synchronise all Simulation_Particle states into rebound, integrate
+        one macro timestep, then read back and update each particle instance.
+        """
+        # Write current state of every particle into the rebound simulation
+        for i, particle in enumerate(self.particles):
+            p = self.ps_step[i]
+            p.x,  p.y,  p.z  = float(particle.r_pos[0]), float(particle.r_pos[1]), float(particle.r_pos[2])
+            p.vx, p.vy, p.vz = float(particle.v[0]),     float(particle.v[1]),     float(particle.v[2])
 
-        # Update particle state and integrate
-        p = self.ps_step[0]
-        p.x, p.y, p.z = self.r_pos[0], self.r_pos[1], self.r_pos[2]
-        p.vx, p.vy, p.vz = self.v[0], self.v[1], self.v[2]
-
+        self._force_call_count = 0   # reset counter for this macro step
         target_time = self.sim_step.t + self.dt
-        self.sim_step.dt = self.dt / 10  # give IAS15 a sensible starting guess
-        
         self.sim_step.integrate(target_time)
+        print(f"  Force calls this timestep: {self._force_call_count}")
 
-        # Read back state
-        p = self.sim_step.particles[0]
-        self.r_pos = jnp.array([p.x, p.y, p.z])
-        self.v = jnp.array([p.vx, p.vy, p.vz])
-
-        r_pos_sph = SSF.Cartesian_to_sph(self.r_pos[0], self.r_pos[1], self.r_pos[2])
-        v_sph = SSF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2], self.v[0], self.v[1], self.v[2])
-
-        self.update_summary_stats(v_sph, r_pos_sph)
-        self.r_pos_sph = r_pos_sph
-        self.v_sph = v_sph
+        # Read back and update each Simulation_Particle
+        for i, particle in enumerate(self.particles):
+            p = self.sim_step.particles[i]
+            particle.update_state(
+                [p.x,  p.y,  p.z],
+                [p.vx, p.vy, p.vz]
+            )
+            #print(f"  Particle {i}: r = {float(particle.r_pos_sph[0]) * self.u.to_Kpc:.4f} kpc")
 
 
     def run_simulation(self):
 
         start = time()
-        eval_library, eigenstate_lib, aj, l = self.first_time_step()
+        aj, Y_lm = self.initialising_simulation()
         end = time()
         self.aj = aj
-        #print(f"First time step completed in {end - start:.2f} seconds")
 
 
-        # Store eigen_energies so construct_acc can access them via self without
-        # an extra argument through the rebound callback chain.
+        Nr = len(self.r)        # number of background radial bins
+        all_idx = jnp.arange(Nr + 1)   # indices 0 .. Nr
+        self.Nr = Nr
+        self.all_idx = all_idx
 
-        start = time()
-        parent_j, Y_lm, lm_pairs = precompute_lm_pairs_Ylms(l)
-        end = time()
-        self.parent_j = parent_j
-        self.lm_l = lm_pairs[:, 0]
-        self.lm_m = lm_pairs[:, 1]
+
+        r_below = jnp.concatenate([self.r, self.r[-1:]])    # (Nr+1,)
+        r_above = jnp.concatenate([self.r[:1], self.r])     # (Nr+1,)
+        self.r_below = r_below
+        self.r_above = r_above
+
+
+
+
 
         #print(f"Precomputation of (l,m) pairs and Y_lm grid completed in {end - start:.2f} seconds")
 
         L_max_out = 2 * self.L - 1  # captures all density harmonics up to l1+l2 <= 2*(L-1)
-                         
+
         self.L_max_out = L_max_out
 
-        if self.frozen == True:
+
+
+        if self.SphHT == False:
 
             # Precompute Gaunt table ONCE — reuse this across all time steps
             gaunt_table = gf.precompute_gaunt_table(self.lm_l, self.lm_m, L_max_out)
             self.gaunt_table = gaunt_table
 
+            _, _, _, _, unique_lm = gaunt_table
+            scatter_matrix = gf.make_scatter_matrix(self.lm_l_per_mode, self.lm_m_per_mode, unique_lm)
+            self.scatter_matrix = scatter_matrix
 
+        else:
 
-            # Pre-convert lm_pairs to numpy once so scipy sph_harm_y receives a
-            # plain numpy array and avoids a GPU to CPU device transfer every sub-step.
-            out_lm = [(L, M) for L in range(L_max_out) for M in range(-L, L+1)]
-            output_lm_pairs = jnp.array(out_lm)
-
-            self.output_lm_pairs = output_lm_pairs
-            self.lm_pairs_np = np.array(output_lm_pairs)
-
-
-            self.autodiff_data['eval_library'] = eval_library
-            self.autodiff_data['eigenstate_lib'] = eigenstate_lib
-
-            # Set up animator
-            if self.animate:
-                self.animator = SimulationAnimator(self.L_max_out, self.r, self.u)
-                print(f"Animation enabled: equatorial (z=0) density slice")
-
-            while self.time_step < self.no_time_steps:
-
-                print(f"Time step {self.time_step + 1} / {self.no_time_steps}")
-
-
-                phase = jnp.exp(-1j * self.eigen_energies * self.time_step * self.dt / hbar.value)
-                R_j_r_phased = self.R_j_r_fixed * phase[None, :]
-                self.current_phase = phase  # shape (Nj,)
-
-
-                # 1. Construct total psi and rho on background grid
-                #start = time()
-                rho_lms = self.construct_frozen_rho_lms(self.aj, self.parent_j, R_j_r_phased)
-                self.rho_lms = rho_lms
-                #end = time()
-                #print(f"Constructing rho_lm's completed in {end - start:.2f} seconds")
-
-                # 1b. Capture animation frame (density at this instant + particle position)
-                if self.animate and self.time_step % self.animate_every == 0:
-                    def inverse_sht_single_r(rho_lm_r):
-                        return s2fft.inverse(rho_lm_r, self.L_max_out, sampling='mw', method='jax')
-
-                    rho_rtp = jax.vmap(inverse_sht_single_r)(rho_lms)  # (Nr, L, 2*L-1)
-
-                    self.animator.store_frame(rho_rtp, self.r_pos)
+            Nj = len(self.eigen_energies)          # Nj is number of distinct (n,l) modes
+            Y_lm_per_j = jax.ops.segment_sum(Y_lm, self.parent_j, num_segments=Nj)  # (Nj, n_theta, n_phi)
+            Q_j_tp = self.aj[:, None, None] * Y_lm_per_j                             # (Nj, n_theta, n_phi)
+            self.Q_j_tp = Q_j_tp
 
 
 
-                # 4. Time step particle (IAS15 calls construct_acc ~8 times internally)
-                start = time()
-                self.time_step_particle()
-                end = time()
-                print(f"Time stepping particle completed in {end - start:.2f} seconds")
+        # Pre-convert lm_pairs to numpy once so scipy sph_harm_y receives a
+        # plain numpy array and avoids a GPU to CPU device transfer every sub-step.
+        out_lm = [(L, M) for L in range(L_max_out) for M in range(-L, L+1)]
+        output_lm_pairs = jnp.array(out_lm)
+
+        self.output_lm_pairs = output_lm_pairs
+        self.lm_pairs_np = np.array(output_lm_pairs)
+
+
+
+        # Set up animator
+        if self.animate:
+            self.animator = SimulationAnimator(self.L_max_out, self.r, self.u)
+            print(f"Animation enabled: equatorial (z=0) density slice")
+
+
+        phase = jnp.exp(-1j * self.eigen_energies * 1 * self.dt / hbar.value)
+        R_j_r_phased = self.R_j_r_fixed * phase[None, :]
+        self.current_phase = phase  # shape (Nj,)
+
+        if self.SphHT == True:
+
+            rho_rtp = self.construct_rho_rtp(R_j_r_phased, self.aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
+            rho_lm = self.forward_s2fft(rho_rtp)  # (Nr, L, 2*L-1)
+            self.rho_lms = rho_lm
+
+
+        else:
+            # 1. Construct total psi and rho on background grid
+            rho_lms = self.construct_rho_lms(self.aj, self.parent_j, R_j_r_phased)
+            self.rho_lms = rho_lms
+
+
+        rho_lm_below = jnp.concatenate([self.rho_lms, self.rho_lms[-1:]], axis=0)    # (Nr+1, L, 2L-1)
+        rho_lm_above = jnp.concatenate([self.rho_lms[:1], self.rho_lms], axis=0)     # (Nr+1, L, 2L-1)
+        self.rho_lms_below = rho_lm_below
+        self.rho_lms_above = rho_lm_above
+
+
+        r_pos_sphs = []
+        r_orbit = self.r_half * self.u.from_Kpc
+
+        r_pos_sphs = jnp.array([particle.r_pos_sph for particle in self.particles])  # (N_particles, 3)
+
+        a_r, _, _ = self.construct_acc_batch(
+            r_pos_sphs,
+            self.autodiff_data['eval_library'],
+            self.autodiff_data['eigenstate_lib'],
+        )
+
+        v_circ_true = jnp.sqrt(jnp.abs(a_r) * r_orbit)
+
+        for i, particle in enumerate(self.particles):
+            v_old = particle.v
+            v_dir = v_old / jnp.linalg.norm(v_old)
+            v_new = v_circ_true[i] * v_dir
+            print(f"New initial circular velocity for particle {i}: {v_new * self.u.to_kms} km/s")
+            v_diff = v_new - v_old
+            print(f"Velocity change from initial guess for particle {i}: {v_diff * self.u.to_kms} km/s")
+            particle.v = v_new
+            p = self.ps_step[i]
+            p.vx, p.vy, p.vz = float(v_new[0]), float(v_new[1]), float(v_new[2])
+
+
+        while self.time_step < self.no_time_steps:
+
+            print(f"Time step {self.time_step + 1} / {self.no_time_steps}")
+
+            # Capture animation frame (density at this instant + all particle positions)
+            if self.animate and self.time_step % self.animate_every == 0:
+                def inverse_sht_single_r(rho_lm_r):
+                    return s2fft.inverse(rho_lm_r, self.L_max_out, sampling='mw', method='jax')
+                rho_rtp = jax.vmap(inverse_sht_single_r)(self.rho_lms)  # (Nr, L, 2*L-1)
+                all_positions = [p.r_pos for p in self.particles]
+                self.animator.store_frame(rho_rtp, all_positions)
+
+            # Time step all particles (IAS15 calls additional_forces_step ~8× internally,
+            # which loops over every particle each call)
+            start = time()
+            self.time_step_particle()
+            end = time()
+            print(f"Time stepping all particles completed in {end - start:.2f} seconds")
+
+            self.time_step += 1

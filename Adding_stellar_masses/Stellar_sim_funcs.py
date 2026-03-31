@@ -91,21 +91,15 @@ def Obtain_pot(rmin, rmax, rho_psi_vals, r):
 
 def Enclosed_mass(r, rho):
 
-    r = np.asarray(r)
-    rho = np.asarray(rho)
+    dr = np.diff(r)
 
-    integrand = 4 * np.pi * r**2 * rho
+    integrand = 4 * jnp.pi * r**2 * rho
 
-    M_enc = np.zeros_like(r, dtype=float)
+    avg_int = 0.5 * (integrand[1:] + integrand[:-1])
 
-    # mass inside [0, r[0]], assume constant density = rho[0]
-    #M_core = 4 * np.pi / 3 * rho[0] * r[0]**3
+    M_enc = jnp.cumsum(avg_int * dr)
 
-    #M_enc[0] = M_core
-
-    for i in range(1, len(r)):
-        #M_enc[i] = M_core + np.trapz(integrand[:i+1], r[:i+1])
-        M_enc[i] = np.trapezoid(integrand[:i+1], r[:i+1])
+    M_enc = jnp.insert(M_enc, 0, 0.0)
 
     return M_enc
 
@@ -295,6 +289,7 @@ def Make_animation_t_indep(r_orbit, init_pos, init_vel, dt, num_steps, acc_mag):
 
     return ani
 
+## THIS IS WRONG SINCE TO USE UNSOLDS THEOREM WE ARE NEGLECTING ANY CROSS TERMS
 
 def Time_step_t_dep(r_pos, v, dt, acc_mag, r, eigen_energies, l, R_j_r, aj, total_mass, k):
 
@@ -1332,6 +1327,7 @@ def Simulate_time_dep_3d_Hanno_Reins(r_orbit, init_pos, dt, num_steps, r, eigen_
 
 def Make_animation_t_dep_3d(r_orbit, init_pos, init_vel, dt, num_steps, r, eigen_energies, l, R_j_r, aj, total_mass, Y_lm, Phi_psi):
 
+
     global r_pos, v, acc_vec, avg_r, k
 
     r_pos = init_pos
@@ -1482,3 +1478,38 @@ def Make_animation_t_dep_3d(r_orbit, init_pos, init_vel, dt, num_steps, r, eigen
     ani = animation.FuncAnimation(fig, update, frames=num_steps, interval=10, blit=True)
 
     return ani
+
+
+def Enclosed_mass_3d(r, theta, phi, rho_rtp, r_orbit):
+
+    sin_theta = np.sin(theta)  # shape (N_theta,)
+
+
+
+    dphi = np.diff(phi)
+    int_phi = 0.5 * np.sum((rho_rtp[:, :, :-1] + rho_rtp[:, :, 1:]) * dphi[None, None, :], axis=2)  # (N_r, N_theta)
+
+    dtheta = np.diff(theta)
+    sin_theta_mid = 0.5 * (sin_theta[:-1] + sin_theta[1:])
+    rho_r = np.sum(0.5 * (int_phi[:, :-1] + int_phi[:, 1:]) * sin_theta_mid[None, :] * dtheta[None, :], axis=1)  # (N_r,)
+
+    # Cumulative trapezoid rule over r
+    g = rho_r * r**2
+    dr = np.diff(r)
+    M_enc = np.zeros(len(r))
+    M_enc[1:] = np.cumsum(0.5 * (g[:-1] + g[1:]) * dr)
+
+    M_enc_func = interp1d(r, M_enc, kind='cubic', fill_value="extrapolate")
+
+    return M_enc_func(r_orbit)
+
+
+
+
+
+
+
+
+
+
+    
