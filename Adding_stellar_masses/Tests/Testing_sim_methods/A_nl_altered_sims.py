@@ -1,8 +1,11 @@
 
-
 import functools
 
 from time import time
+
+import sys
+
+sys.path.append('/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses')
 
 import Stellar_sim_funcs as SSF
 
@@ -419,17 +422,18 @@ class StellarSimTDep:
     (in main function construct_acc_batch)
     '''
 
-    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, static, frozen, SphHT, integrator, plot,
-                 animate=False, animate_every=1):
+    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, SphHT, integrator, a_nl_range, plot,
+                 boost_factor, animate=False, animate_every=1):
 
         self.stellar_v_disp = []
         self.average_r = []
         self.time_step = 0
-        self.static = static
-        self.frozen = frozen
         self.SphHT = SphHT
         self.integrator = integrator
+        self.a_nl_range = a_nl_range
         self.plot = plot
+        self.boost_factor = boost_factor
+
 
         self.m22 = m22
         self.u = jsp.set_schroedinger_units(self.m22)
@@ -492,8 +496,12 @@ class StellarSimTDep:
         rmax = jsp.enclosing_radius(self.r_max_enclosing_frac, density_params)
         eigenstate_lib = jsp.init_eigenstate_library(potential_params, rmin, rmax, a, b, N)
 
+        self.eigen_energies = eigenstate_lib.radial_eigenmode_params.E
+
         l = eigenstate_lib.radial_eigenmode_params.l
+        n = eigenstate_lib.radial_eigenmode_params.n
         self.l = l
+
 
         print('l max from jaxsp:', max(l))
         L = int(max(l) + 1)
@@ -510,24 +518,90 @@ class StellarSimTDep:
         tol = 1e-7
         wavefunction_params = jsp.init_wavefunction_params(eigenstate_lib, density_params, rmin, rmax, tol)
 
+        
+
         total_mass = wavefunction_params.total_mass
         self.total_mass = total_mass
         aj_2 = wavefunction_params.aj_2        # shape (Nj,)
-        self.eigen_energies = eigenstate_lib.radial_eigenmode_params.E
+
+ 
+        nl_labels = list(zip(l.tolist(), n.tolist()))
+
+
+        T_periods = -(1 / self.eigen_energies)
+
+        first_mode_amp = aj_2[0]
+
+        average_part_period = 0.3 * self.u.from_Gyr
+
+        if self.a_nl_range == 'orbital':
+
+
+            sigma = average_part_period  # width of resonance
+            weight = jnp.exp(-0.5 * ((T_periods - average_part_period) / sigma)**2)
+
+            weight = jnp.where(l == 0, 0.0, weight)  # no boost for l=0 modes
+
+            boost = 1.0 + (self.boost_factor - 1.0) * weight  # smooth boost peaking at orbital period
+            aj_2_new = aj_2 * boost
+            aj_2_new = aj_2_new * (jnp.sum(aj_2) / jnp.sum(aj_2_new))  # normalisation
+
+
+        
+        elif self.a_nl_range == 'large':
+
+            mask = (T_periods > 15*average_part_period)
+
+            aj_2_new = jnp.where(mask, first_mode_amp, aj_2)
+        
+
+
+        elif self.a_nl_range == 'small':
+
+            mask = (T_periods > 5*average_part_period) & (T_periods < 15*average_part_period)
+
+            aj_2_new = jnp.where(mask, first_mode_amp, aj_2)
+
+
+        if self.plot: 
+
+            plt.figure(figsize=(10, 5))
+            plt.scatter(range(len(aj_2_new)), aj_2_new, s=5, label='Modified a_nl^2', color='orange', alpha=0.7)
+            plt.scatter(range(len(aj_2)), aj_2, s=5, label='Original a_nl^2', color='blue', alpha=0.5)
+            plt.legend()
+
+            step = max(1, len(nl_labels) // 30)  # show ~30 labels
+            tick_positions = range(0, len(nl_labels), step)
+            tick_labels = [nl_labels[i] for i in tick_positions]
+            plt.xticks(tick_positions, tick_labels, rotation=90, fontsize=10)
+
+            plt.xlabel('(l, n)')
+            plt.ylabel('aj_2')
+            plt.title('Comparing old/new aj_2 values per (l, n) pair')
+            plt.grid(axis='y')
+            plt.yscale('log')
+            plt.tight_layout()
+            plt.show()
+
+        aj_2 = aj_2_new
+
 
         R_j_r = eval_library(self.r, eigenstate_lib.radial_eigenmode_params)  # (Nr, Nj)
         self.R_j_r_fixed = R_j_r
 
-        phase = jnp.exp(-1j * self.eigen_energies * 1 * self.dt / 1)
+
+        phase = jnp.exp(-1j * self.eigen_energies * 0 * self.dt / 1)
         R_j_r_phased = self.R_j_r_fixed * phase[None, :]
+        self.current_phase = phase  # shape (Nj,)
+        self.R_j_r_phased = R_j_r_phased
 
         parent_j, Y_lm, lm_pairs, lm_l_per_mode, lm_m_per_mode, theta, phi = precompute_lm_pairs_Ylms(l)
-
 
         Nmodes = len(parent_j)
         rand_phase_per_mode = jax.random.uniform(jax.random.PRNGKey(42), shape=(Nmodes,), minval=0.0, maxval=2 * jnp.pi)
         aj = jnp.sqrt(aj_2[parent_j]) * jnp.exp(1j * rand_phase_per_mode)  # shape (Nmodes,)
 
+        
         self.parent_j = parent_j
         self.lm_l = lm_pairs[:, 0]        # unique pairs — used for Gaunt table
         self.lm_m = lm_pairs[:, 1]
@@ -543,7 +617,6 @@ class StellarSimTDep:
 
         rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
 
-
         M_enc_tot = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, self.rmax)
 
         print(f"Total enclosed mass at rmax: {M_enc_tot:.3e}")
@@ -554,6 +627,32 @@ class StellarSimTDep:
         print(f"Scaling density and mass by factor {multiply_factor} to match total mass")
 
         self.total_mass *= multiply_factor
+
+
+        if self.plot:
+
+            rho_rtp_old_anl = self.construct_rho_rtp(self.R_j_r_phased, jnp.sqrt(wavefunction_params.aj_2[parent_j]) * jnp.exp(1j * rand_phase_per_mode), self.parent_j, Y_lm)
+
+            rho_rtp_new_anl = self.construct_rho_rtp(self.R_j_r_phased, aj, self.parent_j, Y_lm)
+
+            plotting_theta = int(len(theta) / 2)
+
+            plotting_phi = 0
+
+            rho_r_new_anl = rho_rtp_new_anl[:, plotting_theta, plotting_phi]
+
+            rho_r_old_anl = rho_rtp_old_anl[:, plotting_theta, plotting_phi]
+
+            plt.plot(self.r * self.u.to_Kpc, rho_r_old_anl * self.u.to_Msun / (self.u.to_Kpc)**3, label='Old a_nl', alpha = 0.7)
+            plt.plot(self.r * self.u.to_Kpc, rho_r_new_anl * self.u.to_Msun / (self.u.to_Kpc)**3, label='New a_nl', alpha = 0.7)
+            plt.legend()
+            plt.xlabel('r (kpc)')
+            plt.ylabel(r'$\rho$ [$M_\odot / kpc^3$]')
+            plt.title(r'Density profile with new/old a_nl at $\theta = \pi/2, \phi=0$')
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.grid()
+            plt.show()
 
 
         #------------------------------------------------------------------
@@ -607,6 +706,7 @@ class StellarSimTDep:
             v_i_unit = t_i_unit * jnp.sin(rand_theta) + b_i_unit * jnp.cos(rand_theta)
 
             # Compute circular velocity from spherically-averaged enclosed mass
+            rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, Y_lm)
             M_enc_at_r = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, float(r_orbit))
             v_circ_mag = jnp.sqrt(self.G * M_enc_at_r / r_orbit)
 
@@ -676,7 +776,7 @@ class StellarSimTDep:
     def construct_rho_rtp(self, R_j_r_phased, aj, parent_j, Y_lm):
 
         R_modes = R_j_r_phased[:, parent_j]  # (Nr, Nmodes)
-        aj_modes = aj  # already (Nmodes,) with independent phases
+        aj_modes = aj  # (Nmodes,) — already per-mode with independent phases
 
         full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm)
 
@@ -691,7 +791,7 @@ class StellarSimTDep:
         # Use precomputed R_j_r_phased (set once per macro timestep in run_simulation)
         # to avoid recomputing exp(-i E t / hbar) on every call.
         R_modes = R_j_r_phased[:, parent_j]  # (Nr, Nmodes)
-        aj_modes = aj  # already (Nmodes,) with independent phases
+        aj_modes = aj  # (Nmodes,) — already per-mode with independent phases
 
 
         rho_lm_gaunt = gf.compute_rho_lm_gaunt(
@@ -701,13 +801,6 @@ class StellarSimTDep:
         scatter_matrix=self.scatter_matrix,
         )
 
-        if self.static == True:
-            # set all l > 0 modes to zero
-            #jnp.where - where condition, rho_lm_gaunt, otherwise 0
-            l_inds = jnp.arange(rho_lm_gaunt.shape[1])
-            m_inds = jnp.arange(rho_lm_gaunt.shape[2])
-            rho_lm_gaunt = jnp.where((l_inds[None, :, None] == 0) & (m_inds[None, None, :] == self.L_max_out - 1), rho_lm_gaunt, 0.0 + 0.0j)
-    
 
         return rho_lm_gaunt
 
@@ -723,12 +816,6 @@ class StellarSimTDep:
 
         flm_r = jax.vmap(forward_sht_single_r)(rho_rtp)  # (Nr, L, 2*L-1)
 
-        if self.static == True:
-            # set all l > 0 modes to zero
-            #jnp.where - where condition, rho_lm_gaunt, otherwise 0
-            l_inds = jnp.arange(flm_r.shape[1])
-            m_inds = jnp.arange(flm_r.shape[2])
-            flm_r = jnp.where((l_inds[None, :, None] == 0) & (m_inds[None, None, :] == self.L_max_out - 1), flm_r, 0.0 + 0.0j)
 
         return flm_r
 
@@ -748,28 +835,12 @@ class StellarSimTDep:
             R_j_row = R_j_at_particle_phased[None, :]                     # (1, Nj)
             rho_lm_at_particle = self.construct_rho_lms(self.aj, self.parent_j, R_j_row)[0]
 
-            if self.static == True:
-                # set all l > 0 modes to zero
-                #[N, l, 2l+1]
-
-                l_inds = jnp.arange(rho_lm_at_particle.shape[0])
-                m_inds = jnp.arange(rho_lm_at_particle.shape[1])
-                rho_lm_at_particle = jnp.where((l_inds[:, None] == 0) & (m_inds[None, :] == self.L_max_out - 1), rho_lm_at_particle, 0.0 + 0.0j)
-
 
         else:
             
             psi_at_r  = jnp.einsum('j,jtp->tp', R_j_at_particle_phased, self.Q_j_tp)
             rho_at_r  = self.total_mass * jnp.abs(psi_at_r) ** 2
             rho_lm_at_particle = s2fft.forward(rho_at_r, self.L_max_out, sampling='mw', method='jax')
-
-            if self.static == True:
-                # set all l > 0 modes to zero
-                #[N, l, 2l+1]
-
-                l_inds = jnp.arange(rho_lm_at_particle.shape[0])
-                m_inds = jnp.arange(rho_lm_at_particle.shape[1])
-                rho_lm_at_particle = jnp.where((l_inds[:, None] == 0) & (m_inds[None, :] == self.L_max_out - 1), rho_lm_at_particle, 0.0 + 0.0j)
 
 
         insert_idx = jnp.searchsorted(self.r, particle_r)
@@ -952,10 +1023,9 @@ class StellarSimTDep:
         else:
 
             Nj = len(self.eigen_energies)          # Nj is number of distinct (n,l) modes
-            # Multiply per-mode aj into Y_lm BEFORE summing, so each m sub-mode
-            # contributes its own independent phase to the angular pattern.
+            # aj is now per-mode (Nmodes,) — multiply into Y_lm before summing over m
             aj_Y_lm = self.aj[:, None, None] * Y_lm                                  # (Nmodes, n_theta, n_phi)
-            Q_j_tp = jax.ops.segment_sum(aj_Y_lm, self.parent_j, num_segments=Nj)    # (Nj, n_theta, n_phi)
+            Q_j_tp = jax.ops.segment_sum(aj_Y_lm, self.parent_j, num_segments=Nj)   # (Nj, n_theta, n_phi)
             self.Q_j_tp = Q_j_tp
 
 
@@ -976,20 +1046,17 @@ class StellarSimTDep:
             print(f"Animation enabled: equatorial (z=0) density slice")
 
 
-        phase = jnp.exp(-1j * self.eigen_energies * 1 * self.dt / 1)
-        R_j_r_phased = self.R_j_r_fixed * phase[None, :]
-        self.current_phase = phase  # shape (Nj,)
 
         if self.SphHT == True:
 
-            rho_rtp = self.construct_rho_rtp(R_j_r_phased, self.aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
+            rho_rtp = self.construct_rho_rtp(self.R_j_r_phased, self.aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
             rho_lm = self.forward_s2fft(rho_rtp)  # (Nr, L, 2*L-1)
             self.rho_lms = rho_lm
 
 
         else:
             # 1. Construct total psi and rho on background grid
-            rho_lms = self.construct_rho_lms(self.aj, self.parent_j, R_j_r_phased)
+            rho_lms = self.construct_rho_lms(self.aj, self.parent_j, self.R_j_r_phased)
             self.rho_lms = rho_lms
 
 
@@ -999,132 +1066,8 @@ class StellarSimTDep:
         self.rho_lms_above = rho_lm_above
 
 
-
-        ##########
-
-        if self.plot == True:
-
-            def inverse_s2fft(single_rho_lm_r):
-                return s2fft.inverse(single_rho_lm_r, self.L_max_out, sampling='mw', method='jax')
-
-            rho_rtp = jax.vmap(inverse_s2fft)(self.rho_lms)  # (Nr, L, 2*L-1)
-
-
-            import yt
-            from yt.visualization.volume_rendering.api import (
-                Scene, 
-                Camera, 
-                TransferFunctionHelper, 
-                create_volume_source
-            )
-
-            def rho_rtp_to_cart(rho_rtp, r, theta, phi, Ncart=None):
-                import numpy as np
-                from scipy.interpolate import RegularGridInterpolator
-
-                if Ncart is None:
-                    Ncart = len(r)
-
-                r = np.asarray(r)
-                theta = np.asarray(theta)
-                phi = np.asarray(phi)
-                rho_rtp = np.asarray(rho_rtp)
-
-                r_max = r[-1]
-                r_min = r[0]
-
-                # Interpolate in log-r space since r is logspaced
-                log_r = np.log10(r)
-                interp = RegularGridInterpolator(
-                    (log_r, theta, phi), rho_rtp,
-                    bounds_error=False, fill_value=0.0
-                )
-
-                # Cartesian grid
-                x = np.linspace(-r_max, r_max, Ncart)
-                y = np.linspace(-r_max, r_max, Ncart)
-                z = np.linspace(-r_max, r_max, Ncart)
-                X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
-
-                # Cartesian -> spherical
-                R = np.sqrt(X**2 + Y**2 + Z**2)
-                Theta = np.arccos(np.clip(Z / np.clip(R, 1e-30, None), -1, 1))
-                Phi = np.arctan2(Y, X) % (2 * np.pi)
-
-                # Interpolate in log-r space
-                log_R = np.log10(np.clip(R, r_min, None))
-                pts = np.stack([log_R.ravel(), Theta.ravel(), Phi.ravel()], axis=-1)
-                rho_xyz = interp(pts).reshape(X.shape)
-
-                return rho_xyz, x, y, z
-
-            rho_xyz, x, y, z = rho_rtp_to_cart(rho_rtp, self.r, self.theta, self.phi)
-
-
-            ds = yt.load_uniform_grid(
-            dict(density=np.asarray(rho_xyz) * float(self.u.to_Msun)/float(self.u.to_Kpc)**3),
-            [1000,1000,1000],
-            bbox=np.array([[-self.rmax, self.rmax], [-self.rmax, self.rmax], [-self.rmax, self.rmax]]) * float(self.u.to_Kpc),
-            length_unit="kpc",
-            mass_unit="Msun"
-            )
-
-            ds_section = ds.sphere(ds.domain_center,((self.rmax * self.u.to_Kpc).item(),"kpc"))
-            sc = yt.create_scene(ds_section, ("stream", "density"), "perspective")
-            source = sc.get_source()
-            source.set_log(True)
-            bounds=(1e-2, 3e5)
-                
-            tf = yt.ColorTransferFunction(np.log10(bounds), grey_opacity=False)
-
-            def quadramp(vals, minval, maxval):
-                return ((vals - vals.min()) / (vals.max() - vals.min()))**0.5
-
-            tf.map_to_colormap(
-                np.log10(bounds[0]), np.log10(bounds[1]), 
-                colormap="gist_stern", 
-                scale_func=quadramp
-            )
-
-            
-            tf.add_layers(8,
-                        colormap="gist_stern", 
-                        alpha=np.geomspace(1, 6, 8))
-
-            source.tfh.tf = tf
-            source.tfh.bounds = bounds
-
-            camera = sc.camera
-            camera.position = [1.,0,0]
-            camera.resolution = (900,900)
-            camera.zoom(1.)
-
-            camera.switch_orientation()
-            import matplotlib.pyplot as plt
-            import matplotlib.colors as mcolors
-
-            # Render the scene to an image array
-            im = sc.render()
-
-            # Plot with matplotlib so we can add a colorbar
-            fig, ax = plt.subplots(1, 1, figsize=(9, 9))
-            ax.imshow(im[:, :, :3] / im[:, :, :3].max(), origin="lower")
-            ax.set_axis_off()
-
-            # Add colorbar matching your transfer function bounds
-            norm = mcolors.LogNorm(vmin=bounds[0], vmax=bounds[1])
-            sm = plt.cm.ScalarMappable(cmap="gist_stern", norm=norm)
-            sm.set_array([])
-            cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
-            cbar.set_label(r"Density [M$_\odot$ / kpc$^3$]")
-
-            plt.tight_layout()
-            plt.show()
-
-        #################
-
-
         # Compute initial potential energy for each particle
+                
         r_pos_sphs = jnp.array([particle.r_pos_sph for particle in self.particles])  # (N_particles, 3)
 
         a_r, _, _, phi_lm_at_r, Y_lm_all = self.construct_acc_batch(
@@ -1149,6 +1092,7 @@ class StellarSimTDep:
 
             particle.Change_to_new_vel(v_new)
 
+        
 
         while self.time_step < self.no_time_steps:
 
@@ -1162,6 +1106,31 @@ class StellarSimTDep:
                 all_positions = [p.r_pos for p in self.particles]
                 self.animator.store_frame(rho_rtp, all_positions)
 
+
+            phase = jnp.exp(-1j * self.eigen_energies * self.time_step * self.dt / 1)
+            R_j_r_phased = self.R_j_r_fixed * phase[None, :]
+            self.current_phase = phase  # shape (Nj,)
+            self.R_j_r_phased = R_j_r_phased
+
+            if self.SphHT == True:
+
+                rho_rtp = self.construct_rho_rtp(self.R_j_r_phased, self.aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
+                rho_lm = self.forward_s2fft(rho_rtp)  # (Nr, L, 2*L-1)
+                self.rho_lms = rho_lm
+
+
+            else:
+                # 1. Construct total psi and rho on background grid
+                rho_lms = self.construct_rho_lms(self.aj, self.parent_j, self.R_j_r_phased)
+                self.rho_lms = rho_lms
+
+
+            rho_lm_below = jnp.concatenate([self.rho_lms, self.rho_lms[-1:]], axis=0)    # (Nr+1, L, 2L-1)
+            rho_lm_above = jnp.concatenate([self.rho_lms[:1], self.rho_lms], axis=0)     # (Nr+1, L, 2L-1)
+            self.rho_lms_below = rho_lm_below
+            self.rho_lms_above = rho_lm_above
+
+
             # Time step all particles (IAS15 calls additional_forces_step ~8× internally,
             # which loops over every particle each call)
             start = time()
@@ -1169,6 +1138,7 @@ class StellarSimTDep:
             end = time()
             print(f"Time stepping all particles completed in {end - start:.2f} seconds")
 
+            self.current_phase = jnp.exp(-1j * self.eigen_energies * (self.time_step + 1) * self.dt / 1)
             # Compute phi at updated particle positions for potential energy tracking
             r_pos_sphs_new = jnp.array([p.r_pos_sph for p in self.particles])
             _, _, _, phi_lm_new, Ylm_new = self.construct_acc_batch(
@@ -1182,5 +1152,8 @@ class StellarSimTDep:
                 particle.potential_energy.append(float(phi_at_parts[i]))
 
             
-
             self.time_step += 1
+
+
+
+
