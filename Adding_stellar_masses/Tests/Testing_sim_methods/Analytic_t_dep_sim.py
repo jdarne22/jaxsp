@@ -49,50 +49,62 @@ def precompute_lm_pairs_Ylms(l):
     lm_l = []      # list of l for each mode k
     lm_m = []      # list of m for each mode k
     parent_j = []  # which radial eigenstate j this (l,m) mode comes from
-    lm_pairs = defaultdict(int)
+    lm_pairs_dict = defaultdict(int)
 
     for j_idx, ell in enumerate(l.tolist()):
         for m in range(-ell, ell + 1):
             lm_l.append(ell)
             lm_m.append(m)
             parent_j.append(j_idx)
-            lm_pairs[(ell, m)] += 1
+            lm_pairs_dict[(ell, m)] += 1
 
-    lm_pairs = list(lm_pairs.keys()) # list of ((l,m), count) pairs
+    lm_pairs_list = list(lm_pairs_dict.keys())       # unique (l,m) tuples, insertion order
+    lm_pairs = jnp.array(lm_pairs_list)              # (N_unique_lm, 2)
 
-    lm_pairs = jnp.array(lm_pairs)  # shape (Nmodes, 2)
+    # Map each mode k -> index into lm_pairs_list (its unique (l,m) slot).
+    lm_to_idx = {pair: i for i, pair in enumerate(lm_pairs_list)}
+    lm_idx_per_mode = jnp.array(
+        [lm_to_idx[(ell, m)] for ell, m in zip(lm_l, lm_m)], dtype=jnp.int32)
 
 
     '''Precompute Y_lm's for wavefunction reconstruction'''
 
-    # McEwen-Wiaux-style equiangular grid
+    # McEwen-Wiaux-style equiangular grid.
+    # Y_lm depends only on (l,m), NOT on the parent radial eigenstate j, so we
+    # store one slice per unique (l,m) — shape (N_unique_lm, n_theta, n_phi) —
+    # and let downstream code index via lm_idx_per_mode when it needs per-mode
+    # values. For l_max in the 70s this is a ~20x device-memory reduction vs
+    # the old (Nmodes, n_theta, n_phi) layout, which duplicated each Y_lm
+    # across every j that carries that (l,m).
+    # Store as complex64 to halve transfer size and device storage.
+    # NOTE: with jax_enable_x64=True, einsum(aj[c128] * Y_lm[c64]) promotes to
+    # complex128; to realise the GPU-memory win at runtime, also cast aj and
+    # R_j_r_phased to complex64 at the use sites.
 
-    L = max(l)+1
+    L = int(max(l)) + 1
 
     L_max_out = 2 * L - 1
 
     n_theta = L_max_out
     n_phi = 2 * L_max_out - 1
 
-    # Generate theta values
-    i = jnp.arange(n_theta)
-    theta = (jnp.pi * (2 * i + 1)) / (2 * L_max_out - 1)
-    # Generate phi values
-    j = jnp.arange(n_phi)
-    phi = (2 * jnp.pi * j) / (2 * L_max_out - 1)
+    i = np.arange(n_theta)
+    theta_np = (np.pi * (2 * i + 1)) / (2 * L_max_out - 1)
+    j = np.arange(n_phi)
+    phi_np = (2 * np.pi * j) / (2 * L_max_out - 1)
 
+    Theta, Phi = np.meshgrid(theta_np, phi_np, indexing="ij")  # both (n_theta, n_phi), numpy
 
-    Theta, Phi = jnp.meshgrid(theta, phi, indexing="ij")  # both (n_theta, n_phi)
+    Y_lm_np = np.empty((len(lm_pairs_list), n_theta, n_phi), dtype=np.complex64)
+    for u, (ell, m) in enumerate(lm_pairs_list):
+        Y_lm_np[u] = sph_harm_y(ell, m, Theta, Phi).astype(np.complex64, copy=False)
 
-    Y_list = []
-    for ell, m in zip(lm_l, lm_m):
-        Y_lm_mode = sph_harm_y(ell, m, Theta, Phi)  # (n_theta, n_phi), complex
-        Y_list.append(Y_lm_mode)
+    Y_lm = jnp.asarray(Y_lm_np)  # single host->device transfer, complex64
 
-    Y_lm = jnp.stack(Y_list, axis=0)  # (Nmodes, n_theta, n_phi), complex
-
-
-    return jnp.array(parent_j), Y_lm, lm_pairs, jnp.array(lm_l), jnp.array(lm_m), theta, phi
+    return (jnp.array(parent_j), Y_lm, lm_pairs,
+            jnp.array(lm_l), jnp.array(lm_m),
+            jnp.asarray(theta_np), jnp.asarray(phi_np),
+            lm_idx_per_mode)
 
 @functools.partial(jax.jit, static_argnums=(5,))
 def _compute_all_phi(rho_lm_updated, r_updated, output_lm_pairs, mask_int, mask_ext, L_max_out, G, particle_r):
@@ -523,18 +535,20 @@ class StellarSimTDep:
         phase = jnp.exp(-1j * self.eigen_energies * 0 * self.dt / 1)
         R_j_r_phased = self.R_j_r_fixed * phase[None, :]
 
-        parent_j, Y_lm, lm_pairs, lm_l_per_mode, lm_m_per_mode, theta, phi = precompute_lm_pairs_Ylms(l)
+        (parent_j, Y_lm, lm_pairs, lm_l_per_mode, lm_m_per_mode,
+         theta, phi, lm_idx_per_mode) = precompute_lm_pairs_Ylms(l)
 
         Nmodes = len(parent_j)
         rand_phase_per_mode = jax.random.uniform(jax.random.PRNGKey(42), shape=(Nmodes,), minval=0.0, maxval=2 * jnp.pi)
         aj = jnp.sqrt(aj_2[parent_j]) * jnp.exp(1j * rand_phase_per_mode)  # shape (Nmodes,)
 
-        
+
         self.parent_j = parent_j
         self.lm_l = lm_pairs[:, 0]        # unique pairs — used for Gaunt table
         self.lm_m = lm_pairs[:, 1]
         self.lm_l_per_mode = lm_l_per_mode  # one per mode — used for scatter matrix
         self.lm_m_per_mode = lm_m_per_mode
+        self.lm_idx_per_mode = lm_idx_per_mode  # mode k -> unique-lm slot in Y_lm
         self.theta = theta
         self.phi = phi
         
@@ -543,7 +557,7 @@ class StellarSimTDep:
         r_orbit_mean = self.r_half * self.u.from_Kpc
 
 
-        rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
+        rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, Y_lm, self.lm_idx_per_mode)  # (Nr, n_theta, n_phi)
 
         M_enc_tot = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, self.rmax)
 
@@ -674,12 +688,18 @@ class StellarSimTDep:
         return aj, Y_lm
 
 
-    def construct_rho_rtp(self, R_j_r_phased, aj, parent_j, Y_lm):
+    def construct_rho_rtp(self, R_j_r_phased, aj, parent_j, Y_lm, lm_idx_per_mode):
 
-        R_modes = R_j_r_phased[:, parent_j]  # (Nr, Nmodes)
-        aj_modes = aj  # (Nmodes,) — already per-mode with independent phases
-
-        full_psi_rtp = jnp.einsum('k,rk,ktp->rtp', aj_modes, R_modes, Y_lm)
+        # Exact algebraic regrouping of psi = sum_k aj[k] * R[:, parent_j[k]] *
+        # Y_lm[lm_idx[k]]. Because each (j, l, m) is unique, we can scatter aj
+        # into a small (N_unique_lm, Nj) table and contract with the (Nr, Nj)
+        # radial basis directly — skipping the (Nr, Nmodes) R_modes gather that
+        # previously dominated memory.
+        Nj = R_j_r_phased.shape[1]
+        coeff_uj = jnp.zeros((Y_lm.shape[0], Nj), dtype=aj.dtype)
+        coeff_uj = coeff_uj.at[lm_idx_per_mode, parent_j].add(aj)       # (N_unique_lm, Nj)
+        S_ur = coeff_uj @ R_j_r_phased.T                                # (N_unique_lm, Nr)
+        full_psi_rtp = jnp.einsum('ur,utp->rtp', S_ur, Y_lm)            # (Nr, n_theta, n_phi)
 
         psi_abs2 = jnp.abs(full_psi_rtp) ** 2
         rho_rtp = self.total_mass * psi_abs2
@@ -689,19 +709,15 @@ class StellarSimTDep:
 
     def construct_rho_lms(self, aj, parent_j, R_j_r_phased):
 
-        # Use precomputed R_j_r_phased (set once per macro timestep in run_simulation)
-        # to avoid recomputing exp(-i E t / hbar) on every call.
-        R_modes = R_j_r_phased[:, parent_j]  # (Nr, Nmodes)
-        aj_modes = aj  # (Nmodes,) — already per-mode with independent phases
-
-
+        # Gaunt kernel now takes (Nr, Nj) R_j_r_phased directly and does the
+        # mode -> (l,m) collapse internally via scatter-add, avoiding the
+        # (Nr, Nmodes) R_modes intermediate.
         rho_lm_gaunt = gf.compute_rho_lm_gaunt(
-        aj_modes, R_modes, self.lm_l, self.lm_m, self.total_mass,
-        L_max_out=self.L_max_out,
-        gaunt_table=self.gaunt_table,
-        scatter_matrix=self.scatter_matrix,
+            aj, R_j_r_phased, parent_j, self.lm_idx_sorted_per_mode,
+            self.total_mass,
+            L_max_out=self.L_max_out,
+            gaunt_table=self.gaunt_table,
         )
-
 
         return rho_lm_gaunt
 
@@ -918,15 +934,23 @@ class StellarSimTDep:
             self.gaunt_table = gaunt_table
 
             _, _, _, _, unique_lm = gaunt_table
-            scatter_matrix = gf.make_scatter_matrix(self.lm_l_per_mode, self.lm_m_per_mode, unique_lm)
-            self.scatter_matrix = scatter_matrix
+            # Mode -> index in the sorted unique_lm list (matches gaunt_table's
+            # i/j indices). Replaces the old (N_unique, Nmodes) scatter_matrix:
+            # with ~126k modes that one-hot matrix was itself ~5 GB in float64.
+            self.lm_idx_sorted_per_mode = gf.make_lm_idx_sorted_per_mode(
+                self.lm_l_per_mode, self.lm_m_per_mode, unique_lm)
 
         else:
 
             Nj = len(self.eigen_energies)          # Nj is number of distinct (n,l) modes
-            # aj is now per-mode (Nmodes,) — multiply into Y_lm before summing over m
-            aj_Y_lm = self.aj[:, None, None] * Y_lm                                  # (Nmodes, n_theta, n_phi)
-            Q_j_tp = jax.ops.segment_sum(aj_Y_lm, self.parent_j, num_segments=Nj)   # (Nj, n_theta, n_phi)
+            # Y_lm is (N_unique_lm, n_theta, n_phi). Avoid materialising the
+            # (Nmodes, n_theta, n_phi) per-mode array — instead scatter aj into
+            # a small (N_unique_lm, Nj) coefficient table and contract with
+            # Y_lm. Each (j, l, m) mode is unique, so each (u, j) slot receives
+            # at most one aj contribution.
+            coeff_uj = jnp.zeros((Y_lm.shape[0], Nj), dtype=self.aj.dtype)
+            coeff_uj = coeff_uj.at[self.lm_idx_per_mode, self.parent_j].add(self.aj)
+            Q_j_tp = jnp.einsum('uj,utp->jtp', coeff_uj, Y_lm)                       # (Nj, n_theta, n_phi)
             self.Q_j_tp = Q_j_tp
 
 
@@ -953,7 +977,7 @@ class StellarSimTDep:
 
         if self.SphHT == True:
 
-            rho_rtp = self.construct_rho_rtp(R_j_r_phased, self.aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
+            rho_rtp = self.construct_rho_rtp(R_j_r_phased, self.aj, self.parent_j, Y_lm, self.lm_idx_per_mode)  # (Nr, n_theta, n_phi)
             rho_lm = self.forward_s2fft(rho_rtp)  # (Nr, L, 2*L-1)
             self.rho_lms = rho_lm
 
@@ -1017,7 +1041,7 @@ class StellarSimTDep:
 
             if self.SphHT == True:
 
-                rho_rtp = self.construct_rho_rtp(R_j_r_phased, self.aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
+                rho_rtp = self.construct_rho_rtp(R_j_r_phased, self.aj, self.parent_j, Y_lm, self.lm_idx_per_mode)  # (Nr, n_theta, n_phi)
                 rho_lm = self.forward_s2fft(rho_rtp)  # (Nr, L, 2*L-1)
                 self.rho_lms = rho_lm
 

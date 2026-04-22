@@ -115,53 +115,58 @@ def make_scatter_matrix(lm_l, lm_m, unique_lm):
 
 
 
-def compute_rho_lm_gaunt(aj_modes, R_modes, lm_l, lm_m, total_mass, scatter_matrix,
-                          L_max_out=None, gaunt_table=None, batch_size=500_000):
+def make_lm_idx_sorted_per_mode(lm_l_per_mode, lm_m_per_mode, unique_lm):
+    """
+    Mode k -> index into the sorted unique_lm list.
+    unique_lm comes from precompute_gaunt_table() (sorted(set(...))).
+    """
+    lm_l = list(map(int, lm_l_per_mode))
+    lm_m = list(map(int, lm_m_per_mode))
+    lm_to_idx = {lm: i for i, lm in enumerate(unique_lm)}
+    return jnp.array([lm_to_idx[(l, m)] for l, m in zip(lm_l, lm_m)], dtype=jnp.int32)
+
+
+def compute_rho_lm_gaunt(aj_modes, R_j_r_phased, parent_j, lm_idx_sorted_per_mode,
+                          total_mass, L_max_out, gaunt_table, batch_size=500_000):
     """
     Compute rho_LM(r) using Gaunt coefficients — no grid, no SHT.
 
-    Speedups vs naive version
-    -------------------------
-    1. Modes sharing (l,m) combined into F_{l,m}(r) first, reducing the
-       double sum from O(N_modes^2) to O(N_unique^2).
-    2. Gaunt table precomputed once and passed in via gaunt_table so it can
-       be reused across many time steps at no extra cost.
-    3. Accumulation is a single JIT-compiled segment_sum on GPU per batch —
-       ~10 Python iterations instead of ~2209.
+    Memory-safe formulation: instead of building the per-mode
+    (Nr, Nmodes) array R_modes = R_j_r_phased[:, parent_j] and then
+    scatter-matrix-multiplying it down to F_{l,m}(r), we scatter-add
+    aj_modes into a small (N_unique_lm, Nj) coefficient table and
+    contract with the (Nr, Nj) radial basis directly. Mathematically
+    identical (each (j, l, m) mode is unique, so scatter-add == gather).
 
     Parameters
     ----------
-    aj_modes   : complex (Nmodes,)    per-mode a_k; rand_phase included
-    R_modes    : complex (Nr, Nmodes) R_{j(k)}(r) * exp(-i E_k t/hbar)
-    lm_l, lm_m : int array-like (Nmodes,)
-    total_mass : float
-    L_max_out  : int, optional  default 2*l_max+1 captures all density harmonics
-    gaunt_table : tuple, optional  from precompute_gaunt_table(); computed here if None
-    batch_size  : int  Gaunt entries per GPU batch — tune to available VRAM
-                       (batch_size=100_000 ≈ 1.6 GB complex128 for Nr=1000)
+    aj_modes               : complex (Nmodes,)    per-mode a_k
+    R_j_r_phased           : complex (Nr, Nj)     R_j(r) * exp(-i E_j t/hbar)
+    parent_j               : int    (Nmodes,)     mode k -> radial eigenstate j
+    lm_idx_sorted_per_mode : int    (Nmodes,)     mode k -> index in unique_lm
+                                                   (sorted; matches gaunt_table)
+    total_mass             : float
+    L_max_out              : int
+    gaunt_table            : tuple  from precompute_gaunt_table()
+    batch_size             : int    Gaunt entries per GPU batch
 
     Returns
     -------
     rho_lm : JAX complex array (Nr, L_max_out, 2*L_max_out-1)
-        rho_lm[r, L, L_max_out-1+M] = rho_LM(r)
-        Same indexing convention as s2fft.forward (mw sampling).
     """
-    Nr, Nmodes = R_modes.shape
-
-    if L_max_out is None:
-        lm_l = list(map(int, lm_l))
-        L_max_out = 2 * max(lm_l) + 1
+    Nr, Nj = R_j_r_phased.shape
     N_flat = L_max_out * (2 * L_max_out - 1)
 
-    # aR on GPU directly — no CPU transfer
-    aR = R_modes * aj_modes[None, :]   # (Nr, Nmodes), stays on GPU
-
-    # F_{l,m}(r) via matmul instead of Python loop
-    F_jax = (scatter_matrix @ aR.T).T  # (Nr, N_unique)
-
-    # Unpack Gaunt table
+    # Unpack Gaunt table (unique_lm ordering defines the u-axis)
     all_i, all_j, all_G, all_Lf, unique_lm = gaunt_table
+    N_unique = len(unique_lm)
     N_nz = len(all_i)
+
+    # Scatter-add aj into (N_unique, Nj) table, then matmul with radial basis.
+    # Peak memory O(N_unique * max(Nj, Nr)) instead of O(Nr * Nmodes).
+    coeff_uj = jnp.zeros((N_unique, Nj), dtype=aj_modes.dtype)
+    coeff_uj = coeff_uj.at[lm_idx_sorted_per_mode, parent_j].add(aj_modes)
+    F_jax = (coeff_uj @ R_j_r_phased.T).T  # (Nr, N_unique)
 
     # JIT-compiled batch accumulation on GPU
     rho_flat = jnp.zeros((N_flat, Nr), dtype=complex)

@@ -688,17 +688,14 @@ class StellarSimTDep:
 
     def construct_rho_lms(self, aj, parent_j, R_j_r_phased):
 
-        # Use precomputed R_j_r_phased (set once per macro timestep in run_simulation)
-        # to avoid recomputing exp(-i E t / hbar) on every call.
-        R_modes = R_j_r_phased[:, parent_j]  # (Nr, Nmodes)
-        aj_modes = aj  # already (Nmodes,) with independent phases
-
-
+        # Gaunt kernel now takes (Nr, Nj) R_j_r_phased directly and does the
+        # mode -> (l,m) collapse internally via scatter-add, avoiding the
+        # (Nr, Nmodes) R_modes intermediate.
         rho_lm_gaunt = gf.compute_rho_lm_gaunt(
-        aj_modes, R_modes, self.lm_l, self.lm_m, self.total_mass,
-        L_max_out=self.L_max_out,
-        gaunt_table=self.gaunt_table,
-        scatter_matrix=self.scatter_matrix,
+            aj, R_j_r_phased, parent_j, self.lm_idx_sorted_per_mode,
+            self.total_mass,
+            L_max_out=self.L_max_out,
+            gaunt_table=self.gaunt_table,
         )
 
         if self.static == True:
@@ -946,8 +943,10 @@ class StellarSimTDep:
             self.gaunt_table = gaunt_table
 
             _, _, _, _, unique_lm = gaunt_table
-            scatter_matrix = gf.make_scatter_matrix(self.lm_l_per_mode, self.lm_m_per_mode, unique_lm)
-            self.scatter_matrix = scatter_matrix
+            # Mode -> index in the sorted unique_lm list (matches gaunt_table).
+            # Replaces the old (N_unique, Nmodes) scatter_matrix.
+            self.lm_idx_sorted_per_mode = gf.make_lm_idx_sorted_per_mode(
+                self.lm_l_per_mode, self.lm_m_per_mode, unique_lm)
 
         else:
 
