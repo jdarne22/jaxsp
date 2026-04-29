@@ -544,16 +544,16 @@ class StellarSimTDep:
         rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, Y_lm)  # (Nr, n_theta, n_phi)
 
 
-        M_enc_tot = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, self.rmax)
+        # M_enc_tot = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, self.rmax)
 
-        print(f"Total enclosed mass at rmax: {M_enc_tot:.3e}")
-        print(f"Total mass from wavefunction: {total_mass:.3e}")
+        # print(f"Total enclosed mass at rmax: {M_enc_tot:.3e}")
+        # print(f"Total mass from wavefunction: {total_mass:.3e}")
 
-        multiply_factor = total_mass / M_enc_tot
+        # multiply_factor = total_mass / M_enc_tot
 
-        print(f"Scaling density and mass by factor {multiply_factor} to match total mass")
+        # print(f"Scaling density and mass by factor {multiply_factor} to match total mass")
 
-        self.total_mass *= multiply_factor
+        # self.total_mass *= multiply_factor
 
 
         #------------------------------------------------------------------
@@ -573,6 +573,8 @@ class StellarSimTDep:
 
             sim_step.integrator = "leapfrog"
             sim_step.dt = self.dt
+        
+        init_vels = []
 
 
         self.particles = []
@@ -612,6 +614,8 @@ class StellarSimTDep:
 
             init_pos = r_i
             init_vel = v_circ_mag * v_i_unit
+
+            init_vels.append(v_circ_mag)
 
             print(f"Particle {i}: v_circ = {jnp.linalg.norm(init_vel) * self.u.to_kms:.3f} km/s")
 
@@ -670,6 +674,18 @@ class StellarSimTDep:
         self.sim_step = sim_step
         self.ps_step = ps_step
 
+        mean_init_vel = jnp.mean(jnp.array(init_vels), axis=0)
+
+        orbital_P = 2 * jnp.pi * r_orbit_mean / mean_init_vel
+
+        new_dt = orbital_P / 50
+
+        self.sim_step.dt = float(new_dt)
+
+        self.dt = new_dt
+
+        self.no_time_steps = int(self.total_evolve_time * self.u.from_Gyr / new_dt)
+
         return aj, Y_lm
 
 
@@ -696,6 +712,7 @@ class StellarSimTDep:
             self.total_mass,
             L_max_out=self.L_max_out,
             gaunt_table=self.gaunt_table,
+            batch_size=500_000,
         )
 
         if self.static == True:
@@ -1180,6 +1197,6 @@ class StellarSimTDep:
             for i, particle in enumerate(self.particles):
                 particle.potential_energy.append(float(phi_at_parts[i]))
 
-            
-
+        
+        
             self.time_step += 1

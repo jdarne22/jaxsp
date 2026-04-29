@@ -559,16 +559,16 @@ class StellarSimTDep:
 
         rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, Y_lm, self.lm_idx_per_mode)  # (Nr, n_theta, n_phi)
 
-        M_enc_tot = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, self.rmax)
+        # M_enc_tot = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, self.rmax)
 
-        print(f"Total enclosed mass at rmax: {M_enc_tot:.3e}")
-        print(f"Total mass from wavefunction: {total_mass:.3e}")
+        # print(f"Total enclosed mass at rmax: {M_enc_tot:.3e}")
+        # print(f"Total mass from wavefunction: {total_mass:.3e}")
 
-        multiply_factor = total_mass / M_enc_tot
+        # multiply_factor = total_mass / M_enc_tot
 
-        print(f"Scaling density and mass by factor {multiply_factor} to match total mass")
+        # print(f"Scaling density and mass by factor {multiply_factor} to match total mass")
 
-        self.total_mass *= multiply_factor
+        # self.total_mass *= multiply_factor
 
 
         #------------------------------------------------------------------
@@ -717,6 +717,7 @@ class StellarSimTDep:
             self.total_mass,
             L_max_out=self.L_max_out,
             gaunt_table=self.gaunt_table,
+            batch_size = 100_000
         )
 
         return rho_lm_gaunt

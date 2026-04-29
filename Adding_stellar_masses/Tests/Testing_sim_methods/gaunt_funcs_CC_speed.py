@@ -73,12 +73,12 @@ def precompute_gaunt_table(lm_l, lm_m, L_max_out, cache_dir=".", n_workers=64):
         data = np.load(cache_path)
         return (jnp.array(data["i"]), jnp.array(data["j"]), jnp.array(data["G"]),
                 jnp.array(data["Lf"]), unique_lm)
-    
+
 
     # --- build ---
     print(f"Building Gaunt table ({len(unique_lm)} unique (l,m), L_max_out={L_max_out}) ...")
     tasks = [(l1, l2, L_max_out) for l1 in range(L_max+1) for l2 in range(L_max+1)]
-    
+
     all_i, all_j, all_G, all_Lf = [], [], [], []
     with ProcessPoolExecutor(max_workers=n_workers) as pool:
         for parts in pool.map(_process_l1l2, tasks, chunksize=4):
@@ -126,17 +126,81 @@ def make_lm_idx_sorted_per_mode(lm_l_per_mode, lm_m_per_mode, unique_lm):
     return jnp.array([lm_to_idx[(l, m)] for l, m in zip(lm_l, lm_m)], dtype=jnp.int32)
 
 
+def compute_rho_lm_gaunt_F(F, total_mass, L_max_out, all_i, all_j, all_G, all_Lf, batch_size):
+    """
+    Reduce a precomputed F[r, u] = sum_j coeff_uj * R_j(r) into rho_lm(r) via
+    the Gaunt coefficients.
+
+    F's leading axis is a batch axis: Nr for background grid evaluation,
+    or N_particles for the per-particle batched call from _compute_radial_batch.
+
+    The Gaunt arrays (all_i, all_j, all_G, all_Lf) are passed here as explicit
+    arguments — NOT captured via a closure / self — so that when this function
+    is called from inside a jit'd parent, XLA treats them as dynamic input
+    buffers rather than compile-time constants. Baking them in as constants
+    would require an extra ~6 GB copy of all_G alongside the live array, and
+    that's what the "Failed to allocate N bytes for new constant" OOM was.
+
+    The accumulation over N_nz is split into full batches (lax.scan with
+    lax.dynamic_slice reading batch_size windows at a traced offset) plus a
+    final tail. No padding, no extra allocation.
+
+    Parameters
+    ----------
+    F                         : complex (Nr_or_Nparticles, N_unique)
+    total_mass                : float
+    L_max_out                 : int (static)
+    all_i, all_j, all_G, all_Lf : the 4 array fields of gaunt_table
+    batch_size                : int (static)  Gaunt entries per scan step
+
+    Returns
+    -------
+    rho_lm : complex (Nr_or_Nparticles, L_max_out, 2*L_max_out-1)
+    """
+    Nr, _N_unique = F.shape
+    N_flat = L_max_out * (2 * L_max_out - 1)
+
+    N_nz     = int(all_i.shape[0])
+    n_batches = N_nz // batch_size   # number of full batches
+    n_tail    = N_nz % batch_size    # leftover entries
+
+    # Accumulate full batches via lax.scan. The loop variable `start` indexes
+    # into the Gaunt arrays with lax.dynamic_slice (traced start, static size).
+    # This reads one batch_size window per step without any extra allocation.
+    def body(rho_flat, start):
+        i_b  = jax.lax.dynamic_slice(all_i,  (start,), (batch_size,))
+        j_b  = jax.lax.dynamic_slice(all_j,  (start,), (batch_size,))
+        G_b  = jax.lax.dynamic_slice(all_G,  (start,), (batch_size,))
+        Lf_b = jax.lax.dynamic_slice(all_Lf, (start,), (batch_size,))
+        weighted = (F[:, i_b] * jnp.conj(F[:, j_b]) * G_b[None, :]).T   # (batch_size, Nr)
+        contrib  = jax.ops.segment_sum(weighted, Lf_b, num_segments=N_flat)  # (N_flat, Nr)
+        return rho_flat + contrib, None
+
+    rho_flat_init = jnp.zeros((N_flat, Nr), dtype=jnp.complex128)
+    starts = jnp.arange(n_batches, dtype=jnp.int32) * batch_size   # (n_batches,)
+    rho_flat, _ = jax.lax.scan(body, rho_flat_init, starts)
+
+    # Tail: fewer than batch_size entries left after the last full batch.
+    # Handled with a plain Python if (n_tail is a compile-time int) and static
+    # JAX slice — no extra allocation beyond the small tail arrays.
+    if n_tail > 0:
+        tail_start = n_batches * batch_size
+        i_b  = all_i[tail_start:]
+        j_b  = all_j[tail_start:]
+        G_b  = all_G[tail_start:]
+        Lf_b = all_Lf[tail_start:]
+        weighted = (F[:, i_b] * jnp.conj(F[:, j_b]) * G_b[None, :]).T
+        rho_flat = rho_flat + jax.ops.segment_sum(weighted, Lf_b, num_segments=N_flat)
+
+    return total_mass * rho_flat.T.reshape(Nr, L_max_out, 2 * L_max_out - 1)
+
+
 def compute_rho_lm_gaunt(aj_modes, R_j_r_phased, parent_j, lm_idx_sorted_per_mode,
                           total_mass, L_max_out, gaunt_table, batch_size):
     """
-    Compute rho_LM(r) using Gaunt coefficients — no grid, no SHT.
-
-    Memory-safe formulation: instead of building the per-mode
-    (Nr, Nmodes) array R_modes = R_j_r_phased[:, parent_j] and then
-    scatter-matrix-multiplying it down to F_{l,m}(r), we scatter-add
-    aj_modes into a small (N_unique_lm, Nj) coefficient table and
-    contract with the (Nr, Nj) radial basis directly. Mathematically
-    identical (each (j, l, m) mode is unique, so scatter-add == gather).
+    Backwards-compatible drop-in for the original compute_rho_lm_gaunt.
+    Scatters aj into coeff_uj, matmuls with R_j_r_phased, then delegates the
+    Gaunt accumulation to compute_rho_lm_gaunt_F (scan-based).
 
     Parameters
     ----------
@@ -144,37 +208,22 @@ def compute_rho_lm_gaunt(aj_modes, R_j_r_phased, parent_j, lm_idx_sorted_per_mod
     R_j_r_phased           : complex (Nr, Nj)     R_j(r) * exp(-i E_j t/hbar)
     parent_j               : int    (Nmodes,)     mode k -> radial eigenstate j
     lm_idx_sorted_per_mode : int    (Nmodes,)     mode k -> index in unique_lm
-                                                   (sorted; matches gaunt_table)
     total_mass             : float
     L_max_out              : int
     gaunt_table            : tuple  from precompute_gaunt_table()
-    batch_size             : int    Gaunt entries per GPU batch
+    batch_size             : int    Gaunt entries per scan step
 
     Returns
     -------
-    rho_lm : JAX complex array (Nr, L_max_out, 2*L_max_out-1)
+    rho_lm : JAX complex (Nr, L_max_out, 2*L_max_out-1)
     """
-    Nr, Nj = R_j_r_phased.shape
-    N_flat = L_max_out * (2 * L_max_out - 1)
-
-    # Unpack Gaunt table (unique_lm ordering defines the u-axis)
+    _Nr, Nj = R_j_r_phased.shape
     all_i, all_j, all_G, all_Lf, unique_lm = gaunt_table
     N_unique = len(unique_lm)
-    N_nz = len(all_i)
 
-    # Scatter-add aj into (N_unique, Nj) table, then matmul with radial basis.
-    # Peak memory O(N_unique * max(Nj, Nr)) instead of O(Nr * Nmodes).
     coeff_uj = jnp.zeros((N_unique, Nj), dtype=aj_modes.dtype)
     coeff_uj = coeff_uj.at[lm_idx_sorted_per_mode, parent_j].add(aj_modes)
-    F_jax = (coeff_uj @ R_j_r_phased.T).T  # (Nr, N_unique)
+    F = (coeff_uj @ R_j_r_phased.T).T   # (Nr, N_unique)
 
-    # JIT-compiled batch accumulation on GPU
-    rho_flat = jnp.zeros((N_flat, Nr), dtype=complex)
-    for start in range(0, N_nz, batch_size):
-        end = min(start + batch_size, N_nz)
-        rho_flat = rho_flat + _accum_batch(
-            F_jax, all_i[start:end], all_j[start:end],
-            all_G[start:end], all_Lf[start:end], N_flat,
-        )
-
-    return total_mass * rho_flat.T.reshape(Nr, L_max_out, 2 * L_max_out - 1)
+    return compute_rho_lm_gaunt_F(F, total_mass, L_max_out,
+                                   all_i, all_j, all_G, all_Lf, batch_size)
