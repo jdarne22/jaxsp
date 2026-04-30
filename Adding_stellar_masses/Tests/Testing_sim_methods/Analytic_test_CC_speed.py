@@ -169,7 +169,8 @@ class Simulation_Particle:
         )
 
         # History buffers (same structure as original StellarSimTDep)
-        self.velocities     = [self.v_sph]
+        self.velocities      = [self.v_sph]
+        self.velocities_cart = [self.v]
         self.stellar_v_disp = [0]
         self.r_values       = [float(self.r_pos_sph[0])]
         self.average_r      = [float(self.r_pos_sph[0])]
@@ -190,7 +191,8 @@ class Simulation_Particle:
             self.r_pos[0], self.r_pos[1], self.r_pos[2],
             v_corrected[0],     v_corrected[1],     v_corrected[2]
         )
-        self.velocities = [self.v_sph]
+        self.velocities      = [self.v_sph]
+        self.velocities_cart = [self.v]
 
         self.kinetic_energy = [1/2 * jnp.sum(self.v**2)]
         self.ang_mom = [jnp.linalg.norm(jnp.cross(self.r_pos, self.v))]
@@ -214,6 +216,7 @@ class Simulation_Particle:
         )
 
         self.velocities.append(self.v_sph)
+        self.velocities_cart.append(self.v)
         velocities_arr = jnp.array(self.velocities)
         new_vel_disp = (
             jnp.std(velocities_arr[:, 0])**2
@@ -635,7 +638,7 @@ class StellarSimTDep:
         self.sim_step = sim_step
         self.ps_step = ps_step
 
-        if self.dt_override == True:
+        if self.dt_override is not None:
 
             mean_init_vel = jnp.mean(jnp.array(init_vels), axis=0)
 
@@ -644,9 +647,9 @@ class StellarSimTDep:
             lambda_db_kpc = 19.15 / (self.m22 * mean_init_vel * self.u.to_kms)
             T_c = lambda_db_kpc / (mean_init_vel * self.u.to_Kpc) 
 
-            new_dt_orb = orbital_P / 30
+            new_dt_orb = orbital_P / self.dt_override
 
-            new_dt_c = T_c / 30
+            new_dt_c = T_c / self.dt_override
 
             new_dt = min(new_dt_orb, new_dt_c)
 

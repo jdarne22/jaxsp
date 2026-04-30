@@ -167,7 +167,8 @@ class Simulation_Particle:
         )
 
         # History buffers (same structure as original StellarSimTDep)
-        self.velocities     = [self.v_sph]
+        self.velocities      = [self.v_sph]
+        self.velocities_cart = [self.v]
         self.stellar_v_disp = [0]
         self.r_values       = [float(self.r_pos_sph[0])]
         self.average_r      = [float(self.r_pos_sph[0])]
@@ -188,7 +189,8 @@ class Simulation_Particle:
             self.r_pos[0], self.r_pos[1], self.r_pos[2],
             v_corrected[0],     v_corrected[1],     v_corrected[2]
         )
-        self.velocities = [self.v_sph]
+        self.velocities      = [self.v_sph]
+        self.velocities_cart = [self.v]
 
         self.kinetic_energy = [1/2 * jnp.sum(self.v**2)]
         self.ang_mom = [jnp.linalg.norm(jnp.cross(self.r_pos, self.v))]
@@ -212,6 +214,7 @@ class Simulation_Particle:
         )
 
         self.velocities.append(self.v_sph)
+        self.velocities_cart.append(self.v)
         velocities_arr = jnp.array(self.velocities)
         new_vel_disp = (
             jnp.std(velocities_arr[:, 0])**2
@@ -525,10 +528,35 @@ class StellarSimTDep:
 
         init_vels = []
 
+        from scipy.optimize import brentq
+
+        def _F(r, a):
+            return r**3 / (r**2 + a**2)**1.5
+
+        r_half_code = self.r_half * self.u.from_Kpc
+
+        def _median_residual(a):
+            return _F(r_half_code, a) - 0.5 * (_F(rmin, a) + _F(rmax, a))
+
+        a_plummer = brentq(_median_residual,
+                        1e-4 * r_half_code, 1e4 * r_half_code,
+                        xtol=1e-10 * r_half_code)
+
+        F_min = _F(rmin, a_plummer)
+        F_max = _F(rmax, a_plummer)
+
+        print(f"Plummer scale a = {a_plummer / self.u.from_Kpc:.4f} kpc, "
+            f"target median = {self.r_half:.4f} kpc, "
+            f"truncated to [{rmin / self.u.from_Kpc:.4f}, {rmax / self.u.from_Kpc:.4f}] kpc")
+
         self.particles = []
         for i in range(self.no_of_particles):
 
-            r_orbit = jnp.abs(jax.random.normal(jax.random.PRNGKey(i), shape=(), dtype=jnp.float64) * 0.1 * r_orbit_mean + r_orbit_mean)
+            #r_orbit = jnp.abs(jax.random.normal(jax.random.PRNGKey(i), shape=(), dtype=jnp.float64) * 0.1 * r_orbit_mean + r_orbit_mean)
+
+            u_i = jax.random.uniform(jax.random.PRNGKey(i), shape=(), dtype=jnp.float64, minval=F_min, maxval=F_max)
+            r_orbit = a_plummer * (u_i**(-2.0/3.0) - 1.0)**(-0.5)
+
 
             X1 = jax.random.normal(jax.random.PRNGKey(i+1000), shape=(), dtype=jnp.float64)
             X2 = jax.random.normal(jax.random.PRNGKey(i+2000), shape=(), dtype=jnp.float64)
@@ -622,7 +650,13 @@ class StellarSimTDep:
         self.sim_step = sim_step
         self.ps_step = ps_step
 
-        if self.dt_override == True:
+        radii = jnp.array([jnp.linalg.norm(p.r_pos) for p in self.particles])
+        print(f"empirical median r = {jnp.median(radii) / self.u.from_Kpc:.4f} kpc "
+            f"(target {self.r_half:.4f} kpc), "
+            f"min = {radii.min() / self.u.from_Kpc:.4f}, "
+            f"max = {radii.max() / self.u.from_Kpc:.4f}")
+
+        if self.dt_override is not None:
 
             mean_init_vel = jnp.mean(jnp.array(init_vels), axis=0)
 
@@ -631,9 +665,9 @@ class StellarSimTDep:
             lambda_db_kpc = 19.15 / (self.m22 * mean_init_vel * self.u.to_kms)
             T_c = lambda_db_kpc / (mean_init_vel * self.u.to_Kpc) 
 
-            new_dt_orb = orbital_P / 30
+            new_dt_orb = orbital_P / self.dt_override
 
-            new_dt_c = T_c / 30
+            new_dt_c = T_c / self.dt_override
 
             new_dt = min(new_dt_orb, new_dt_c)
 

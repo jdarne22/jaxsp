@@ -321,18 +321,16 @@ R0_list_kpc = [0.19, 1, 2]
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-static = False
-frozen = True
-dt_override = True
+dt_override = 20
 
 
 for m22 in m22_list:
     for R0 in R0_list_kpc:
 
-        print('Running frozen sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
+        print('Running t dep sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
 
-        t_dep_leapfrog = ATCCS.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 10, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
-                                    r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override, static = static, frozen = frozen)
+        t_dep_leapfrog = ATD_CC.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 10, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
+                                    r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override)
         
 
         t_dep_leapfrog.run_simulation()
@@ -385,14 +383,13 @@ for m22 in m22_list:
             f"Beat time band: [{min_T_beat:.3f}, {max_T_beat:.3f}] Gyr\n"
             f"$\\Delta t$ = {dt_Gyr:.4f} Gyr"
         )
-        plt.text(0.02, 0.98, info, transform=plt.gca().transAxes,
+        plt.text(1.02, 0.98, info, transform=plt.gca().transAxes,
                 verticalalignment='top', fontsize=9,
                 bbox=dict(boxstyle='round', facecolor='paleturquoise', alpha=0.6))
-        
 
-        plt.legend(loc = 'lower right')
+        plt.legend(bbox_to_anchor=(1, 0.7))
 
-        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/Frozen/frozen_lf_m{m22}_R{R0}.png', dpi=300)
+        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/Sweeping_m22_R0/t_dep_lf_m{m22}_R{R0}.png', dpi=300)
         plt.close()
 
 
@@ -415,7 +412,7 @@ for m22 in m22_list:
 
 
         plt.tight_layout()
-        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/Frozen/frozen_lf_eng_amom_m{m22}_R{R0}.png', dpi=300)
+        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/Sweeping_m22_R0/t_dep_lf_eng_amom_m{m22}_R{R0}.png', dpi=300)
         plt.close()
 
 
