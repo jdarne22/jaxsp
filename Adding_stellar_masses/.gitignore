@@ -10,6 +10,3 @@
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
-
-# Plots (regenerable outputs)
-Tests/Testing_sim_methods/Plots/

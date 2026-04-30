@@ -37,11 +37,7 @@ importlib.reload(SSF)
 importlib.reload(gf)
 
 
-'''For Animations and plotting'''
 import matplotlib.pyplot as plt
-import matplotlib.animation as mpl_animation
-from matplotlib import cm
-from matplotlib.colors import Normalize
 
 
 def precompute_lm_pairs_Ylms(l):
@@ -145,160 +141,6 @@ def _compute_all_phi(rho_lm_updated, r_updated, output_lm_pairs, mask_int, mask_
     return jax.vmap(compute_phi_for_lm)(output_lm_pairs)
 
 
-
-#--------------------------------------------------------------------------------------------------------------------------
-"""
-3D animation of axion dark matter density in the equatorial (z=0) plane.
-The surface height at each (x, y) point encodes the local density.
-"""
-class SimulationAnimator:
-
-    def __init__(self, L, r_grid, u):
-
-        self.u = u
-        self.L = L
-
-        # MW-sampling angular grid
-        n_theta = L
-        n_phi   = 2 * L - 1
-        i_arr   = np.arange(n_theta)
-        theta   = (np.pi * (2 * i_arr + 1)) / (2 * L - 1)
-        j_arr   = np.arange(n_phi)
-        phi     = (2 * np.pi * j_arr) / (2 * L - 1)
-        phi     = np.append(phi, 2 * np.pi)  # close phi ring for smooth plotting
-
-        # Index of the theta slice closest to pi/2 (equatorial plane, z=0)
-        self.theta_eq_idx = int(np.argmin(np.abs(theta - np.pi / 2)))
-        print(f"Equatorial slice: theta index {self.theta_eq_idx}, "
-              f"theta = {theta[self.theta_eq_idx]:.4f} rad (pi/2 = {np.pi/2:.4f})")
-
-        # 2D polar grid in the xy-plane: r x phi → (X, Y)
-        r_kpc = np.array(r_grid) * float(u.to_Kpc)
-        R_grid, Phi_grid = np.meshgrid(r_kpc, phi, indexing='ij')  # (Nr, n_phi+1)
-        self.X = R_grid * np.cos(Phi_grid)
-        self.Y = R_grid * np.sin(Phi_grid)
-
-        # Frame storage — particle_positions is now a list of lists (one per particle)
-        self.density_frames = []
-        self.particle_positions = []   # list of frames; each frame is a list of (x,y,z) per particle
-
-    def store_frame(self, rho_rtp, particle_xyz_list):
-        """
-        Capture one snapshot: equatorial density slice + all particle positions.
-
-        Parameters
-        ----------
-        rho_rtp : array (Nr, n_theta, n_phi)
-        particle_xyz_list : list of (x, y, z) Cartesian positions, one per particle
-        """
-        rho_eq = np.array(np.real(rho_rtp[:, self.theta_eq_idx, :]))  # (Nr, n_phi)
-        rho_eq = np.append(rho_eq, rho_eq[:, 0:1], axis=1)            # close phi: (Nr, n_phi+1)
-        self.density_frames.append(rho_eq)
-        frame_positions = [
-            [float(xyz[0]) * float(self.u.to_Kpc),
-             float(xyz[1]) * float(self.u.to_Kpc),
-             float(xyz[2]) * float(self.u.to_Kpc)]
-            for xyz in particle_xyz_list
-        ]
-        self.particle_positions.append(frame_positions)
-
-    def create_animation(self, interval=200, save_path=None, orbit_radius_kpc=None):
-        """
-        Build a matplotlib FuncAnimation from the stored frames.
-        X/Y axes are spatial coordinates in the equatorial plane (kpc).
-        Z axis is the density value at each (x, y) point.
-        All particles are shown as individual scatter markers.
-        """
-
-        fig = plt.figure(figsize=(12, 9))
-        ax = fig.add_subplot(111, projection='3d')
-
-        cmap = cm.inferno
-
-        # Use a fixed global colour scale across all frames so the oscillation is visible
-        all_rho = np.concatenate([f.ravel() for f in self.density_frames])
-        global_norm = Normalize(vmin=all_rho.min(), vmax=all_rho.max())
-
-        # Number of particles (inferred from first frame)
-        n_particles = len(self.particle_positions[0])
-
-        # Pre-convert positions: shape (n_frames, n_particles, 3)
-        all_positions = np.array(self.particle_positions)  # (n_frames, n_particles, 3)
-
-        # Initial density surface
-        rho0 = self.density_frames[0]
-        surf = [ax.plot_surface(self.X, self.Y, rho0,
-                                cmap=cmap, norm=global_norm, shade=False, alpha=0.85)]
-
-        # One scatter marker per particle
-        colors = plt.cm.Set1(np.linspace(0, 1, n_particles))
-        particle_dots = []
-        for i in range(n_particles):
-            p0 = self.particle_positions[0][i]
-            dot = ax.scatter([p0[0]], [p0[1]], [0.0],
-                             color=colors[i], s=80, zorder=5,
-                             edgecolors='white', linewidths=0.5,
-                             depthshade=False)
-            particle_dots.append(dot)
-
-        # Orbit trails per particle
-        trail_lines = []
-        for i in range(n_particles):
-            p0 = self.particle_positions[0][i]
-            line, = ax.plot([p0[0]], [p0[1]], [0.0],
-                            color=colors[i], alpha=0.5, linewidth=1)
-            trail_lines.append(line)
-
-        # Axis limits
-        if orbit_radius_kpc is not None:
-            xy_lim = orbit_radius_kpc * 1.3
-        else:
-            xy_lim = np.max(np.abs(all_positions[:, :, :2])) * 1.3
-        ax.set_xlim(-xy_lim, xy_lim)
-        ax.set_ylim(-xy_lim, xy_lim)
-        ax.set_xlabel(r'$x$ [kpc]')
-        ax.set_ylabel(r'$y$ [kpc]')
-        ax.set_zlabel(r'$\rho$ [a.u.]')
-        title = ax.set_title('Time step: 0')
-
-        mappable = cm.ScalarMappable(norm=global_norm, cmap=cmap)
-        fig.colorbar(mappable, ax=ax, shrink=0.5, label=r'$\rho$')
-
-        def update(frame):
-            surf[0].remove()
-            rho = self.density_frames[frame]
-            surf[0] = ax.plot_surface(self.X, self.Y, rho,
-                                      cmap=cmap, norm=global_norm, shade=False, alpha=0.85)
-
-            for i in range(n_particles):
-                pos = self.particle_positions[frame][i]
-                particle_dots[i]._offsets3d = ([pos[0]], [pos[1]], [0.0])
-                trail_lines[i].set_data(all_positions[:frame + 1, i, 0],
-                                        all_positions[:frame + 1, i, 1])
-                trail_lines[i].set_3d_properties(np.zeros(frame + 1))
-
-            title.set_text(f'Time step: {frame + 1}')
-            return [surf[0]] + particle_dots + trail_lines
-
-        import matplotlib
-        matplotlib.rcParams['animation.embed_limit'] = 2**10
-
-        ani = mpl_animation.FuncAnimation(fig, update,
-                                          frames=len(self.density_frames),
-                                          interval=interval, blit=False)
-
-        if save_path:
-            ani.save(save_path, writer='ffmpeg', fps=10)
-            print(f"Animation saved to {save_path}")
-
-        else:
-            from IPython.display import HTML, display
-            html = HTML(ani.to_jshtml())
-            plt.close(fig)
-            display(html)
-            return html
-
-#--------------------------------------------------------------------------------------------------------------------
 
 
 class Simulation_Particle:
@@ -436,8 +278,7 @@ class StellarSimTDep:
     (in main function construct_acc_batch)
     '''
 
-    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, SphHT, integrator, plot,
-                 animate=False, animate_every=1):
+    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, SphHT, integrator, plot, dt_override):
 
         self.stellar_v_disp = []
         self.average_r = []
@@ -445,6 +286,7 @@ class StellarSimTDep:
         self.SphHT = SphHT
         self.integrator = integrator
         self.plot = plot
+        self.dt_override = dt_override
 
 
         self.m22 = m22
@@ -466,11 +308,6 @@ class StellarSimTDep:
         self.no_radius_bins = no_radius_bins
 
         self.G = GN.value * (self.u.from_cm**3) / (self.u.from_g * self.u.from_s**2)
-
-        # Animation settings
-        self.animate = animate
-        self.animate_every = animate_every
-        self.animator = None
 
         # Precomputed quantities shared across all IAS15 sub-steps within a macro timestep.
 
@@ -686,6 +523,7 @@ class StellarSimTDep:
             sim_step.integrator = "leapfrog"
             sim_step.dt = self.dt
 
+        init_vels = []
 
         self.particles = []
         for i in range(self.no_of_particles):
@@ -725,7 +563,9 @@ class StellarSimTDep:
             init_pos = r_i
             init_vel = v_circ_mag * v_i_unit
 
-            print(f"Particle {i}: v_circ = {jnp.linalg.norm(init_vel) * self.u.to_kms:.3f} km/s")
+            init_vels.append(v_circ_mag)
+
+            print(f"Particle {i}: v_circ = {v_circ_mag * self.u.to_kms:.3f} km/s")
 
             particle = Simulation_Particle(i, init_pos, init_vel, self.u)
             self.particles.append(particle)
@@ -781,6 +621,30 @@ class StellarSimTDep:
 
         self.sim_step = sim_step
         self.ps_step = ps_step
+
+        if self.dt_override == True:
+
+            mean_init_vel = jnp.mean(jnp.array(init_vels), axis=0)
+
+            orbital_P = 2 * jnp.pi * r_orbit_mean / mean_init_vel
+
+            lambda_db_kpc = 19.15 / (self.m22 * mean_init_vel * self.u.to_kms)
+            T_c = lambda_db_kpc / (mean_init_vel * self.u.to_Kpc) 
+
+            new_dt_orb = orbital_P / 30
+
+            new_dt_c = T_c / 30
+
+            new_dt = min(new_dt_orb, new_dt_c)
+
+            self.sim_step.dt = float(new_dt)
+
+            self.dt = new_dt
+
+            self.no_time_steps = int(self.total_evolve_time * self.u.from_Gyr / new_dt)
+
+            print('New dt [Gyr]:', self.dt * self.u.to_Gyr, 'No of time steps:', self.no_time_steps)
+
 
         return aj, Y_lm
 
@@ -1177,12 +1041,6 @@ class StellarSimTDep:
 
 
 
-        # Set up animator
-        if self.animate:
-            self.animator = SimulationAnimator(self.L_max_out, self.r, self.u)
-            print(f"Animation enabled: equatorial (z=0) density slice")
-
-
         phase = jnp.exp(-1j * self.eigen_energies * 0 * self.dt / 1)
         R_j_r_phased = self.R_j_r_fixed * phase[None, :]
         self.current_phase = phase  # shape (Nj,)
@@ -1361,15 +1219,6 @@ class StellarSimTDep:
         while self.time_step < self.no_time_steps:
 
             print(f"Time step {self.time_step + 1} / {self.no_time_steps}")
-
-            # Capture animation frame (density at this instant + all particle positions)
-            if self.animate and self.time_step % self.animate_every == 0:
-                def inverse_sht_single_r(rho_lm_r):
-                    return s2fft.inverse(rho_lm_r, self.L_max_out, sampling='mw', method='jax')
-                rho_rtp = jax.vmap(inverse_sht_single_r)(self.rho_lms)  # (Nr, L, 2*L-1)
-                all_positions = [p.r_pos for p in self.particles]
-                self.animator.store_frame(rho_rtp, all_positions)
-
 
             phase = jnp.exp(-1j * self.eigen_energies * self.time_step * self.dt / 1)
             R_j_r_phased = self.R_j_r_fixed * phase[None, :]

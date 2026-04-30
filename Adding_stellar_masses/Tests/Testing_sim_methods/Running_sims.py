@@ -314,27 +314,25 @@ importlib.reload(ATCCS)
 #----------------------------------------------------------------------------------
 # ENTERING T DEP SIMS
 
-m22_list = [2, 3]
+m22_list = [1, 2, 3]
 R0_list_kpc = [0.19, 1, 2]
 
 
-animate = False
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-frozen = True
 static = False
+frozen = True
 dt_override = True
 
 
 for m22 in m22_list:
     for R0 in R0_list_kpc:
 
-        print('Running frozen ULDM for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
+        print('Running frozen sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
 
         t_dep_leapfrog = ATCCS.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 10, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
-                                    r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, plot = plot, frozen = frozen,
-                                    static = static, animate=animate, animate_every=10, dt_override=dt_override)
+                                    r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override, static = static, frozen = frozen)
         
 
         t_dep_leapfrog.run_simulation()
@@ -359,6 +357,7 @@ for m22 in m22_list:
         for particle in range(r_all.shape[0]):
             plt.plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, r_all[particle] * t_dep_leapfrog.u.to_Kpc, alpha = 0.2, color='gray')
         plt.axhline(t_dep_leapfrog.r_half, color='r', linestyle='--', label='Initial Particle Position (r_half)')
+
         plt.xlabel('Time [Gyr]')
         plt.ylabel('Average Stellar Radius [Kpc]')
         plt.title('Average Stellar Radius over Time')
@@ -369,7 +368,7 @@ for m22 in m22_list:
 
         lambda_db_kpc = 19.15 / (t_dep_leapfrog.m22 * v0 * t_dep_leapfrog.u.to_kms)
         T_c = lambda_db_kpc / (v0 * t_dep_leapfrog.u.to_Kpc) * t_dep_leapfrog.u.to_Gyr
-
+        plt.axhline(np.mean(lambda_db_kpc), color='g', linestyle='--', label='$\\lambda_{{\\rm db}}$')
 
         E = np.array(t_dep_leapfrog.eigen_energies)
         freq_diff = np.abs(E[:, None] - E[None, :])
@@ -382,13 +381,14 @@ for m22 in m22_list:
 
         info = (
             f"$T_{{\\rm orb}}$ (mean) = {mean_T_orb:.3f} Gyr\n"
-            f"$T_{{\\rm c}}$ = {float(T_c[0]):.3f} Gyr\n"
+            f"$T_{{\\rm c}}$ = {float(np.mean(T_c)):.3f} Gyr\n"
             f"Beat time band: [{min_T_beat:.3f}, {max_T_beat:.3f}] Gyr\n"
             f"$\\Delta t$ = {dt_Gyr:.4f} Gyr"
         )
         plt.text(0.02, 0.98, info, transform=plt.gca().transAxes,
                 verticalalignment='top', fontsize=9,
                 bbox=dict(boxstyle='round', facecolor='paleturquoise', alpha=0.6))
+        
 
         plt.legend(loc = 'lower right')
 
