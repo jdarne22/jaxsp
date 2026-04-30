@@ -1,2 +1,15 @@
 *.egg-info
 *__pycache__*
+
+# Precomputed data — regenerable, too large for git
+*.npz
+*.pkl
+*.npy
+*.h5
+*.hdf5
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Plots (regenerable outputs)
+Tests/Testing_sim_methods/Plots/
