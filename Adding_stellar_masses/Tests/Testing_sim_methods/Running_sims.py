@@ -1,6 +1,6 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 #os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 #os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"   # or: "cuda_async"
@@ -23,6 +23,8 @@ import Analytic_t_dep_sim_CC_speed as ATD_CC
 
 import Analytic_test_CC_speed as ATCCS
 
+import Analytic_t_dep_sim_CC_DIFFUSIVE as ATD_CC_DIFF
+
 
 
 import jaxsp as jsp
@@ -43,7 +45,7 @@ importlib.reload(ATD)
 importlib.reload(A_nl)
 importlib.reload(ATD_CC)
 importlib.reload(ATCCS)
-
+importlib.reload(ATD_CC_DIFF)
 
 
 #----------------------------------------------------------------------------------
@@ -314,14 +316,14 @@ importlib.reload(ATCCS)
 #----------------------------------------------------------------------------------
 # ENTERING T DEP SIMS
 
-m22_list = [1, 2, 3]
-R0_list_kpc = [0.19, 1, 2]
+m22_list = [2]
+R0_list_kpc = [0.19]
 
 
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-dt_override = 20
+dt_override = 30
 
 
 for m22 in m22_list:
@@ -329,7 +331,7 @@ for m22 in m22_list:
 
         print('Running t dep sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
 
-        t_dep_leapfrog = ATD_CC.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 10, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
+        t_dep_leapfrog = ATD_CC_DIFF.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
                                     r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override)
         
 
@@ -343,15 +345,17 @@ for m22 in m22_list:
         potential_energy_all = np.array([p.potential_energy for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1)
         ang_mom_all = np.array([p.ang_mom for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1, 3)
 
-        time_step2 = t_dep_leapfrog.time_step
+        time_step = t_dep_leapfrog.time_step
         stellar_v_disp2 = np.mean(v_disp_all, axis=0)  # Average over particles
 
-        average_r2 = np.mean(r_all, axis=0)  # Average over particles
+        average_r = np.mean(r_all, axis=0)  # Average over particles
+
+        no_time_steps = t_dep_leapfrog.no_time_steps
+        
+        x = np.arange(no_time_steps + 1)  # Time steps array
 
 
-        x = np.linspace(0, time_step2, len(stellar_v_disp2))
-
-        plt.plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, average_r2 * t_dep_leapfrog.u.to_Kpc, label='Average Particle Radius')
+        plt.plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, average_r * t_dep_leapfrog.u.to_Kpc, label='Average Particle Radius')
         for particle in range(r_all.shape[0]):
             plt.plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, r_all[particle] * t_dep_leapfrog.u.to_Kpc, alpha = 0.2, color='gray')
         plt.axhline(t_dep_leapfrog.r_half, color='r', linestyle='--', label='Initial Particle Position (r_half)')
@@ -389,7 +393,7 @@ for m22 in m22_list:
 
         plt.legend(bbox_to_anchor=(1, 0.7))
 
-        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/Sweeping_m22_R0/t_dep_lf_m{m22}_R{R0}.png', dpi=300)
+        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/DIFF/t_dep_lf_m{m22}_R{R0}.png', dpi=300, bbox_inches='tight')
         plt.close()
 
 
@@ -412,7 +416,7 @@ for m22 in m22_list:
 
 
         plt.tight_layout()
-        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/Sweeping_m22_R0/t_dep_lf_eng_amom_m{m22}_R{R0}.png', dpi=300)
+        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/DIFF/t_dep_lf_eng_amom_m{m22}_R{R0}.png', dpi=300, bbox_inches='tight')
         plt.close()
 
 
