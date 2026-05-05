@@ -332,10 +332,12 @@ class StellarSimTDep:
 
     def initialising_simulation(self):
 
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "precomputed_wf")
+        os.makedirs(cache_dir, exist_ok=True)
         cache_suffix = f"m22_{float(self.m22):.6g}_rbins_{int(self.no_radius_bins)}"
-        r_j_r_fname = f"precomputed_R_j_r_{cache_suffix}.npz"
-        pkl_fname   = f"precomputed_objs_{cache_suffix}.pkl"
-        y_lm_fname  = f"precomputed_Y_lm_{cache_suffix}.npz"
+        r_j_r_fname = os.path.join(cache_dir, f"precomputed_R_j_r_{cache_suffix}.npz")
+        pkl_fname   = os.path.join(cache_dir, f"precomputed_objs_{cache_suffix}.pkl")
+        y_lm_fname  = os.path.join(cache_dir, f"precomputed_Y_lm_{cache_suffix}.npz")
 
         cache_params = {
             'm22': float(self.m22),
@@ -357,7 +359,7 @@ class StellarSimTDep:
             return True
 
         R_j_r = None
-        if r_j_r_fname in os.listdir() and pkl_fname in os.listdir():
+        if os.path.isfile(r_j_r_fname) and os.path.isfile(pkl_fname):
             data = np.load(r_j_r_fname)
             if _cache_valid(data, cache_params):
                 print(f"Loading precomputed R_j_r from {r_j_r_fname}...")
@@ -441,7 +443,7 @@ class StellarSimTDep:
         R_j_r_phased = self.R_j_r_fixed * phase[None, :]
 
         Y_lm = None
-        if y_lm_fname in os.listdir():
+        if os.path.isfile(y_lm_fname):
             data = np.load(y_lm_fname)
             if _cache_valid(data, cache_params):
                 print(f"Loading precomputed Y_lm and lm_pairs from {y_lm_fname}...")

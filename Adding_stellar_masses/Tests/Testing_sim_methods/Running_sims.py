@@ -317,13 +317,13 @@ importlib.reload(ATD_CC_DIFF)
 # ENTERING T DEP SIMS
 
 m22_list = [2]
-R0_list_kpc = [0.19]
+R0_list_kpc = [0.19, 1]
 
 
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-dt_override = 30
+dt_override = 10
 
 
 for m22 in m22_list:
@@ -331,8 +331,8 @@ for m22 in m22_list:
 
         print('Running t dep sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
 
-        t_dep_leapfrog = ATD_CC_DIFF.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
-                                    r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override)
+        t_dep_leapfrog = ATD_CC.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 1, 
+                                    r_max_enclosing_frac = 0.99, no_radius_bins = 2000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override)
         
 
         t_dep_leapfrog.run_simulation()
