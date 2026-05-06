@@ -23,8 +23,6 @@ import Analytic_t_dep_sim_CC_speed as ATD_CC
 
 import Analytic_test_CC_speed as ATCCS
 
-import Analytic_t_dep_sim_CC_DIFFUSIVE as ATD_CC_DIFF
-
 
 
 import jaxsp as jsp
@@ -45,7 +43,7 @@ importlib.reload(ATD)
 importlib.reload(A_nl)
 importlib.reload(ATD_CC)
 importlib.reload(ATCCS)
-importlib.reload(ATD_CC_DIFF)
+
 
 
 #----------------------------------------------------------------------------------
@@ -324,6 +322,7 @@ SphHT = True
 integrator = 'leapfrog'
 plot = False
 dt_override = 10
+ramp_time = 0.5
 
 
 for m22 in m22_list:
@@ -332,7 +331,7 @@ for m22 in m22_list:
         print('Running t dep sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
 
         t_dep_leapfrog = ATD_CC.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 1, 
-                                    r_max_enclosing_frac = 0.99, no_radius_bins = 2000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override)
+                                    r_max_enclosing_frac = 0.99, no_radius_bins = 2000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override, ramp_time=ramp_time)
         
 
         t_dep_leapfrog.run_simulation()

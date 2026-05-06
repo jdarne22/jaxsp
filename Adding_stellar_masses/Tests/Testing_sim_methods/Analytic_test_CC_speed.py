@@ -284,7 +284,7 @@ class StellarSimTDep:
     '''
 
     def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, SphHT, integrator, plot,
-                 frozen, static, dt_override):
+                 frozen, static, dt_override, time_dep):
 
         self.stellar_v_disp = []
         self.average_r = []
@@ -295,6 +295,7 @@ class StellarSimTDep:
         self.frozen = frozen
         self.static = static
         self.dt_override = dt_override
+        self.time_dep = time_dep
 
 
         self.m22 = m22
@@ -327,10 +328,12 @@ class StellarSimTDep:
 
     def initialising_simulation(self):
 
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "precomputed_wf")
+        os.makedirs(cache_dir, exist_ok=True)
         cache_suffix = f"m22_{float(self.m22):.6g}_rbins_{int(self.no_radius_bins)}"
-        r_j_r_fname = f"precomputed_R_j_r_{cache_suffix}.npz"
-        pkl_fname   = f"precomputed_objs_{cache_suffix}.pkl"
-        y_lm_fname  = f"precomputed_Y_lm_{cache_suffix}.npz"
+        r_j_r_fname = os.path.join(cache_dir, f"precomputed_R_j_r_{cache_suffix}.npz")
+        pkl_fname   = os.path.join(cache_dir, f"precomputed_objs_{cache_suffix}.pkl")
+        y_lm_fname  = os.path.join(cache_dir, f"precomputed_Y_lm_{cache_suffix}.npz")
 
         cache_params = {
             'm22': float(self.m22),
@@ -352,7 +355,7 @@ class StellarSimTDep:
             return True
 
         R_j_r = None
-        if r_j_r_fname in os.listdir() and pkl_fname in os.listdir():
+        if os.path.isfile(r_j_r_fname) and os.path.isfile(pkl_fname):
             data = np.load(r_j_r_fname)
             if _cache_valid(data, cache_params):
                 print(f"Loading precomputed R_j_r from {r_j_r_fname}...")
@@ -366,6 +369,7 @@ class StellarSimTDep:
                 eval_library = jax.vmap(jax.vmap(jsp.eval_radial_eigenmode, in_axes=(None, 0)), in_axes=(0, None))
             else:
                 print(f"Cached {r_j_r_fname} stale (parameter mismatch); recomputing.")
+
         if R_j_r is None:
 
             cNFWtides_params = jnp.array([
@@ -441,7 +445,7 @@ class StellarSimTDep:
         R_j_r_phased = self.R_j_r_fixed * phase[None, :]
 
         Y_lm = None
-        if y_lm_fname in os.listdir():
+        if os.path.isfile(y_lm_fname):
             data = np.load(y_lm_fname)
             if _cache_valid(data, cache_params):
                 print(f"Loading precomputed Y_lm and lm_pairs from {y_lm_fname}...")
@@ -466,7 +470,6 @@ class StellarSimTDep:
                     **cache_params)
 
 
-
         Nmodes = len(parent_j)
         rand_phase_per_mode = jax.random.uniform(jax.random.PRNGKey(42), shape=(Nmodes,), minval=0.0, maxval=2 * jnp.pi)
         aj = jnp.sqrt(aj_2[parent_j]) * jnp.exp(1j * rand_phase_per_mode)  # shape (Nmodes,)
@@ -483,7 +486,7 @@ class StellarSimTDep:
         
         # Constructing initial conditions based on Andrew paper
 
-        r_orbit_mean = self.r_half * self.u.from_Kpc
+        #r_orbit_mean = self.r_half * self.u.from_Kpc
 
 
         rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, Y_lm, self.lm_idx_per_mode)  # (Nr, n_theta, n_phi)
@@ -529,8 +532,7 @@ class StellarSimTDep:
         
             sim_step.integrator = "ias15"
             sim_step.force_is_velocity_dependent = False
-            sim_step.ri_ias15.min_dt = self.dt
-            sim_step.ri_ias15.epsilon = 1e-9
+            sim_step.ri_ias15.epsilon = 1e-5
         
         elif self.integrator == 'leapfrog':
 
@@ -544,7 +546,7 @@ class StellarSimTDep:
         self.particles = []
         for i in range(self.no_of_particles):
 
-            r_orbit = jnp.abs(jax.random.normal(jax.random.PRNGKey(i), shape=(), dtype=jnp.float64) * 0.1 * r_orbit_mean + r_orbit_mean)
+            r_orbit = jax.random.uniform(jax.random.PRNGKey(i), shape=(), minval=0.1 * self.u.from_Kpc, maxval=0.3 * self.u.from_Kpc)
 
             X1 = jax.random.normal(jax.random.PRNGKey(i+1000), shape=(), dtype=jnp.float64)
             X2 = jax.random.normal(jax.random.PRNGKey(i+2000), shape=(), dtype=jnp.float64)
@@ -638,16 +640,27 @@ class StellarSimTDep:
         self.sim_step = sim_step
         self.ps_step = ps_step
 
+        r_orbits = jnp.array([p.r_values[0] for p in self.particles])
+
+        r_orbit_mean = jnp.mean(r_orbits)
+
+        print(f"Mean initial orbital radius: {r_orbit_mean * self.u.to_Kpc:.3f} kpc")
+
         if self.dt_override is not None:
 
-            mean_init_vel = jnp.mean(jnp.array(init_vels), axis=0)
+            orbital_P = 2 * jnp.pi * r_orbits / jnp.array(init_vels)
 
-            orbital_P = 2 * jnp.pi * r_orbit_mean / mean_init_vel
+            min_orbital_P = jnp.min(orbital_P)
+
+            mean_init_vel = jnp.mean(jnp.array(init_vels))
 
             lambda_db_kpc = 19.15 / (self.m22 * mean_init_vel * self.u.to_kms)
             T_c = lambda_db_kpc / (mean_init_vel * self.u.to_Kpc) 
 
-            new_dt_orb = orbital_P / self.dt_override
+            print(f"Minimum orbital period: {min_orbital_P * self.u.to_Myr:.3f} Myr")
+            print(f"Characteristic time from de Broglie wavelength: {T_c * self.u.to_Myr:.3f} Myr")
+
+            new_dt_orb = min_orbital_P / self.dt_override
 
             new_dt_c = T_c / self.dt_override
 
@@ -1273,7 +1286,12 @@ class StellarSimTDep:
                 phase = jnp.exp(-1j * self.eigen_energies * 1 * self.dt / 1)
 
             else:
-                phase = jnp.exp(-1j * self.eigen_energies * self.time_step * self.dt / 1)
+
+                if self.time_dep:
+                    phase = jnp.exp(-1j * self.eigen_energies * self.time_step * self.dt / 1)
+                
+                else:
+                    phase = jnp.exp(-1j * self.eigen_energies * 0 * self.dt / 1)
 
 
             R_j_r_phased = self.R_j_r_fixed * phase[None, :]
@@ -1309,7 +1327,13 @@ class StellarSimTDep:
                 self.current_phase = jnp.exp(-1j * self.eigen_energies * 1 * self.dt / 1)
 
             else:
-                self.current_phase = jnp.exp(-1j * self.eigen_energies * (self.time_step + 1) * self.dt / 1)
+
+                if self.time_dep:
+                    self.current_phase = jnp.exp(-1j * self.eigen_energies * (self.time_step + 1) * self.dt / 1)
+                
+                else:
+                    self.current_phase = jnp.exp(-1j * self.eigen_energies * 0 * self.dt / 1)
+
             # Compute phi at updated particle positions for potential energy tracking
             r_pos_sphs_new = jnp.array([p.r_pos_sph for p in self.particles])
             _, _, _, phi_lm_new, Ylm_new = self.construct_acc_batch(

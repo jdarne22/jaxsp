@@ -533,8 +533,7 @@ class StellarSimTDep:
         
             sim_step.integrator = "ias15"
             sim_step.force_is_velocity_dependent = False
-            sim_step.ri_ias15.min_dt = self.dt
-            sim_step.ri_ias15.epsilon = 1e-9
+            sim_step.ri_ias15.epsilon = 1e-6
         
         elif self.integrator == 'leapfrog':
 
@@ -544,8 +543,6 @@ class StellarSimTDep:
         # Plummer cluster (scale a = r_half) on a circular orbit at R_orbit
         # in the halo. Stars are zero-mass test particles drawn from the
         # isotropic Plummer (r, v) DF in the cluster rest frame:
-        #     ρ_*(r) ∝ (1 + r²/a²)^(-5/2)
-        #     σ_1D²(r) = G M_c / (6 √(r² + a²))             (Binney & Tremaine 4.94)
         # Cluster mass M_c (kwarg) sets the initial internal velocity dispersion;
         # the particles do not self-gravitate during the integration.
         a_plummer = self.r_half * self.u.from_Kpc
@@ -1123,7 +1120,7 @@ class StellarSimTDep:
 
         # Linear ramp: rho_per is scaled from 0 → 1 over the first 1 Gyr so
         # particles are not abruptly exposed to the full fluctuation spectrum.
-        ramp_time = 1.0 * self.u.from_Gyr
+        ramp_time = 1 * self.u.from_Gyr
         self.n_ramp_steps = int(jnp.ceil(ramp_time / self.dt).item())
         self.no_time_steps = self.n_ramp_steps + self.no_time_steps
         print(f"Ramp phase: {self.n_ramp_steps} steps "
