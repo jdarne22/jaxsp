@@ -13,16 +13,13 @@ sys.path.insert(0, "/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses")
 
 
 
-import analytic_test_gaunt as ATG
+import Analytic_test as ATG
 
 import Analytic_t_dep_sim as ATD
 
 import A_nl_altered_sims as A_nl
 
-import Analytic_t_dep_sim_CC_speed as ATD_CC
-
-import Analytic_test_CC_speed as ATCCS
-
+import Analytic_t_dep_sim_Ylm_skip as ATD_Ylm_skip
 
 
 import jaxsp as jsp
@@ -41,8 +38,7 @@ import importlib
 importlib.reload(ATG)
 importlib.reload(ATD)
 importlib.reload(A_nl)
-importlib.reload(ATD_CC)
-importlib.reload(ATCCS)
+importlib.reload(ATD_Ylm_skip)
 
 
 
@@ -330,7 +326,7 @@ for m22 in m22_list:
 
         print('Running t dep sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
 
-        t_dep_leapfrog = ATD_CC.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 1, 
+        t_dep_leapfrog = ATD.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 1, 
                                     r_max_enclosing_frac = 0.99, no_radius_bins = 2000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override, ramp_time=ramp_time)
         
 
