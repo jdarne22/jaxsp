@@ -30,7 +30,7 @@ importlib.reload(gf)
 
 # k mode is defined as a unique nlm pair
 # j mode is defined as a unique nl pair (multiple j modes can have the same l, but different n)
-
+# u is index of unique lm pair
 
 def precompute_lm_pairs(l):
     '''Precompute (l, m) bookkeeping for spherical harmonics.
@@ -71,44 +71,6 @@ def precompute_lm_pairs(l):
             jnp.asarray(theta_np), jnp.asarray(phi_np),
             lm_pairs_idx_for_kmode)
 
-
-@functools.partial(jax.jit, static_argnames=("L",))
-def build_Legendre_table(L, theta):
-
-    '''Fully-normalised Legendre table P_l^m(cos theta) for m >= 0.
-    '''
-
-    x = jnp.cos(theta)
-    s = jnp.sin(theta)
-    T = theta.shape[0]
-    inv_sqrt_4pi = 1.0 / jnp.sqrt(4.0 * jnp.pi)
-
-    def sect(prev, m):
-        cur = -jnp.sqrt((2 * m + 1) / (2 * m)) * s * prev
-        return cur, cur
-    P00 = jnp.full((T,), inv_sqrt_4pi)
-    _, tail = jax.lax.scan(sect, P00, jnp.arange(1, L))
-    Pmm = jnp.concatenate([P00[None], tail], axis=0)        # (L, T)
-
-    def column(m):
-        col = jnp.zeros((L, T)).at[m].set(Pmm[m])
-        Pm1 = jnp.sqrt(2 * m + 3) * x * Pmm[m]
-        col = jax.lax.cond(m + 1 < L,
-                           lambda c: c.at[m + 1].set(Pm1),
-                           lambda c: c, col)
-
-        def body(l, st):
-            col, p1, p2 = st
-            a = jnp.sqrt((2 * l - 1) * (2 * l + 1) / ((l - m) * (l + m)))
-            b = jnp.sqrt((2 * l + 1) * (l + m - 1) * (l - m - 1)
-                         / ((2 * l - 3) * (l - m) * (l + m)))
-            cur = a * x * p1 - b * p2
-            return col.at[l].set(cur), cur, p1
-        col, _, _ = jax.lax.fori_loop(m + 2, L, body, (col, Pm1, Pmm[m]))
-        return col
-
-    cols = jax.vmap(column)(jnp.arange(L))                  # (m, l, T)
-    return jnp.transpose(cols, (1, 0, 2))                   # (l, m, T)
 
 
 @functools.partial(jax.jit, static_argnums=(5,))
@@ -618,51 +580,50 @@ class StellarSimTDep:
 
     def compute_diagonal_rho_expansion(self):
 
-        """
-            rho_static(r, theta, phi) = m_tot * sum_{j,m} |a_{j,m}|^2 R_j(r)^2 |Y_{l_j,m}(theta, phi)|^2
+        """Time-averaged (diagonal) density. This only multiplies terms with same nlm.
+
+        Because |a_{j,m}|² is m-independent (isotropic random phases, line 401),
+        the addition theorem Σ_m |Y_{lm}(θ,φ)|² = (2l+1)/4π collapses the
+        angular sum to a constant, giving a spherically symmetric static density:
+
+            ρ_static(r) = total_mass · Σ_j  weight_j · |R_j(r)|²
+            weight_j     = |a_j|² · (2l_j + 1) / (4π)
         """
 
         Nj = self.R_j_r_fixed.shape[1]
-        abs_aj_sq = jnp.abs(self.aj) ** 2
 
-        a_lm_j_static = jnp.zeros((self.lm_pairs_jax.shape[0], Nj), dtype=jnp.float64)
-        a_lm_j_static = a_lm_j_static.at[self.lm_idx_per_mode, self.parent_j].add(abs_aj_sq)
+        # Recover |a|² per j-mode: all k-modes sharing the same j carry the same value.
+        aj_sq_k = jnp.abs(self.aj) ** 2                                       # (Nk,)
+        aj_sq_j = jnp.zeros(Nj, dtype=jnp.float64).at[self.parent_j].set(aj_sq_k)  # (Nj,)
 
-        # |Y_lm|^2 = (P_l^|m|(cos theta))^2 — phi-independent and real.
-        L_in = self.L
-        P_table = build_Legendre_table(L_in, self.theta)                       # (L_in, L_in, T)
-        abs_m = jnp.abs(self.lm_pairs_jax[:, 1])
-        Y_abs_sq_t = (P_table[self.lm_pairs_jax[:, 0], abs_m] ** 2).astype(jnp.float64)  # (N_unique, T)
-
-        M_j_t = jnp.einsum('uj,ut->jt', a_lm_j_static, Y_abs_sq_t)    # (Nj, T)
+        weight_j = aj_sq_j * (2.0 * self.l.astype(jnp.float64) + 1.0) / (4.0 * jnp.pi)
+        self.weight_j = weight_j                                               # (Nj,) — reused by static rho_lm calls
 
         R_sq = (jnp.abs(self.R_j_r_fixed) ** 2).astype(jnp.float64)
-        rho_static_rt = self.total_mass * jnp.einsum('Rj,jt->Rt', R_sq, M_j_t)  # (Nr, T)
+        rho_static_r = self.total_mass * (R_sq @ weight_j)                    # (Nr,)
 
 
-        n_phi = self.phi.shape[0]
-        rho_static_rtp = jnp.broadcast_to(
-            rho_static_rt[:, :, None], rho_static_rt.shape + (n_phi,))
-        rho_static_lms = self.compute_rho_lms_s2fft(rho_static_rtp)
+        Nr    = rho_static_r.shape[0]
+        L_out = self.L_max_out
+        rho_static_lms = jnp.zeros((Nr, L_out, 2 * L_out - 1), dtype=jnp.complex128)
 
-        return rho_static_lms, M_j_t
+        # Since rho_static only depends on r (anglular part collapses), only the 0,0 mode will survive when we project onto Y_lm basis
+        # Y00 = 1/sqrt(4pi) so we need to multiply by sqrt(4pi) to get the correct coefficient for the 0,0 mode as the integral will be 4pi.
+        return rho_static_lms.at[:, 0, L_out - 1].set(rho_static_r * jnp.sqrt(4.0 * jnp.pi))
 
-    def compute_rho_lm_at_particles_diagonal_only(self, R_j_at_particles, M_j_t):
-
+    def compute_rho_lm_at_particles_diagonal_only(self, R_j_at_particles):
         """Time-averaged (diagonal-only) rho_lm at each particle's exact r.
+
+        Because ρ_static is spherically symmetric, only (l=0, m=0) is nonzero:
+            ρ_lm(r_p) = ρ_static(r_p) · sqrt(4π) · δ_{l0} δ_{m0}
+        No SHT needed — just a dot product against weight_j.
         """
-
-        R_sq_all = (jnp.abs(R_j_at_particles) ** 2).astype(jnp.float64)
-        L_max_out = self.L_max_out
-        total_mass = self.total_mass
-        n_phi = self.phi.shape[0]
-
-        def single(R_sq_at_r):
-            rho_at_r_t = total_mass * jnp.einsum('j,jt->t', R_sq_at_r, M_j_t)  # (T,)
-            rho_at_r = jnp.broadcast_to(rho_at_r_t[:, None], rho_at_r_t.shape + (n_phi,))
-            return s2fft.forward(rho_at_r, L_max_out, sampling='mw', method='jax')
-
-        return jax.vmap(single)(R_sq_all)
+        R_sq_all = (jnp.abs(R_j_at_particles) ** 2).astype(jnp.float64)  # (N_p, Nj)
+        rho_r_p  = self.total_mass * (R_sq_all @ self.weight_j)           # (N_p,)
+        N_p      = rho_r_p.shape[0]
+        L_out    = self.L_max_out
+        out = jnp.zeros((N_p, L_out, 2 * L_out - 1), dtype=jnp.complex128)
+        return out.at[:, 0, L_out - 1].set(rho_r_p * jnp.sqrt(4.0 * jnp.pi))
 
     def construct_rho_lms_gaunt(self, aj, parent_j, R_j_r_phased):
 
@@ -861,8 +822,8 @@ class StellarSimTDep:
 
         return dphi_lm_dr_at_r, phi_lm_at_r  # (Nmodes,), (Nmodes,)
 
-    def calc_rho_lm_at_parts_and_call_insert(self, positions_sph, current_phase, radial_eigenmode_params, a_u_j, all_i, all_j, 
-                              all_G, all_Lf, rho_lms_below, rho_lms_above, a_u_j_sphht, M_j_t, ramp_frac):
+    def calc_rho_lm_at_parts_and_call_insert(self, positions_sph, current_phase, radial_eigenmode_params, a_u_j, all_i, all_j,
+                              all_G, all_Lf, rho_lms_below, rho_lms_above, a_u_j_sphht, ramp_frac):
         
         """JIT-compilable: radial basis evaluation + batched rho_lm + vmap
         over the per-particle insertion step.
@@ -888,7 +849,7 @@ class StellarSimTDep:
 
         # Time-averaged (diagonal-only) rho_lm at the same radii. Used as
         # the baseline for the ramp.
-        rho_lm_at_particles_static = self.compute_rho_lm_at_particles_diagonal_only(R_j_at_particles, M_j_t)
+        rho_lm_at_particles_static = self.compute_rho_lm_at_particles_diagonal_only(R_j_at_particles)
 
 
         rho_lm_at_particles = (rho_lm_at_particles_static + 
@@ -947,7 +908,6 @@ class StellarSimTDep:
             self.rho_lms_below,
             self.rho_lms_above,
             self.a_u_j_sphht,
-            self.M_j_t,
             self.current_ramp_frac,
         )
 
@@ -1130,7 +1090,8 @@ class StellarSimTDep:
 
 
         # One-shot precomputation of the time-averaged (diagonal-only) density.
-        self.rho_static_lms, self.M_j_t = self.compute_diagonal_rho_expansion()
+        # Also sets self.weight_j as a side-effect.
+        self.rho_static_lms = self.compute_diagonal_rho_expansion()
 
         #Build_rho_lms_for_timestep(timestep) - needs rho_static_lms computed and in self
         self.rho_lms = self.Build_rho_lms_for_timestep(0)
@@ -1326,9 +1287,65 @@ class StellarSimTDep:
             for i, particle in enumerate(self.particles):
                 particle.potential_energy.append(float(phi_at_parts[i]))
 
-            
+
             self.time_step += 1
 
 
+    def run_simulation_profiled(self, time_output='profile_time.prof',
+                                memory_output='profile_memory.txt', top_n=30):
+        """Run `run_simulation` under cProfile (time) and tracemalloc (memory).
 
+        cProfile output goes to `time_output` (binary). Inspect with e.g.
+            python -m pstats profile_time.prof
+            # or interactively: snakeviz profile_time.prof
+        A console summary of the top `top_n` functions is printed for both
+        cumulative-time and self-time sorts.
 
+        tracemalloc takes a single snapshot at the end of the run and writes
+        the top `top_n` allocation sites (by total size) to `memory_output`.
+        Peak/current allocated bytes are also reported.
+
+        Caveat for JAX: most heavy work here is JIT'd and dispatched
+        asynchronously, so cProfile timings reflect Python-side overhead +
+        time blocking on async results. For pure kernel timing, use
+        `jax.profiler` or insert `jax.block_until_ready(...)` at key points.
+        """
+        import cProfile
+        import pstats
+        import tracemalloc
+
+        tracemalloc.start()
+        profiler = cProfile.Profile()
+        profiler.enable()
+
+        try:
+            self.run_simulation()
+        finally:
+            profiler.disable()
+            snapshot = tracemalloc.take_snapshot()
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+
+        profiler.dump_stats(time_output)
+
+        stats = pstats.Stats(profiler).strip_dirs()
+        print(f"\n===== cProfile: top {top_n} by cumulative time =====")
+        stats.sort_stats('cumulative').print_stats(top_n)
+        print(f"\n===== cProfile: top {top_n} by self (tottime) =====")
+        stats.sort_stats('tottime').print_stats(top_n)
+
+        top_stats = snapshot.statistics('lineno')
+        header = (f"tracemalloc: peak = {peak / 1e6:.2f} MB, "
+                  f"current = {current / 1e6:.2f} MB")
+        print(f"\n===== {header} =====")
+        print(f"Top {top_n} allocation sites (by size):")
+        with open(memory_output, 'w') as f:
+            f.write(header + "\n\n")
+            f.write(f"Top {top_n} allocation sites (by size):\n")
+            for stat in top_stats[:top_n]:
+                line = str(stat)
+                print(line)
+                f.write(line + "\n")
+
+        print(f"\nFull cProfile data written to: {time_output}")
+        print(f"Memory summary written to:     {memory_output}")

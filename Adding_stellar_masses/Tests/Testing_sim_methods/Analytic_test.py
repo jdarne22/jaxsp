@@ -514,7 +514,7 @@ class StellarSimTDep:
             
             plt.xlabel('r (kpc)')
             plt.ylabel(r'$\rho$ [$M_\odot / kpc^3$]')
-            plt.title(f'Density profile with m22 = {self.m22} at $\theta = \pi/2, \phi=0$')
+            plt.title(f'Density profile with m22 = {self.m22} at $\theta = pi/2, phi=0$')
             plt.xscale('log')
             plt.yscale('log')
             plt.grid()

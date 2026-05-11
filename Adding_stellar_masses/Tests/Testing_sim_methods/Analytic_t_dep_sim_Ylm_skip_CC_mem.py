@@ -240,8 +240,8 @@ class StellarSimTDep:
     class to update particle states.
     '''
 
-    def __init__(self, m22, r_half, r_half_width, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, 
-                 no_radius_bins, SphHT, integrator, plot, dt_override, ramp_time):
+    def __init__(self, m22, r_half, r_half_width, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac,
+                 no_radius_bins, SphHT, integrator, plot, dt_override, ramp_time, L_force_frac=1.0):
 
         self.stellar_v_disp = []
         self.average_r = []
@@ -251,6 +251,7 @@ class StellarSimTDep:
         self.plot = plot
         self.dt_override = dt_override
         self.ramp_time = ramp_time
+        self.L_force_frac = L_force_frac
 
         self.m22 = m22
         self.u = jsp.set_schroedinger_units(self.m22)
@@ -413,36 +414,21 @@ class StellarSimTDep:
         
         # Constructing initial conditions based on Andrew paper
 
-        rho_rtp = self.construct_rho_rtp(R_j_r_phased, aj, self.parent_j, self.lm_pairs_jax, self.lm_idx_per_mode,)
+        # Spherically-integrated rho_r(r) = ∫ρ sinθ dθ dφ via Parseval — no
+        # (Nr, T, P) grid is ever materialised. Then build cumulative M_enc(r)
+        # once via the trapezoid rule so per-particle enclosed mass is just an
+        # interp lookup, not an N_particles × full-grid 3D integral.
+        rho_r = self.construct_rho_r(
+            R_j_r_phased, aj, self.parent_j, self.lm_pairs_jax, self.lm_idx_per_mode,
+        )
 
-        # M_enc_tot = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, self.rmax)
-
-        # print(f"Total enclosed mass at rmax: {M_enc_tot:.3e}")
-        # print(f"Total mass from wavefunction: {total_mass:.3e}")
-
-        # multiply_factor = total_mass / M_enc_tot
-
-        # print(f"Scaling density and mass by factor {multiply_factor} to match total mass")
-
-        # self.total_mass *= multiply_factor
-
-        if self.plot:
-
-            plotting_theta = int(len(theta) / 2)
-
-            plotting_phi = 0
-
-            rho_r = rho_rtp[:, plotting_theta, plotting_phi]
-
-            plt.plot(self.r * self.u.to_Kpc, rho_r * self.u.to_Msun / (self.u.to_Kpc)**3)
-            
-            plt.xlabel('r (kpc)')
-            plt.ylabel(r'$\rho$ [$M_\odot / kpc^3$]')
-            plt.title(f'Density profile with m22 = {self.m22} at $theta = \pi/2, \phi=0$')
-            plt.xscale('log')
-            plt.yscale('log')
-            plt.grid()
-            plt.show()
+        g = rho_r * self.r ** 2
+        dr = jnp.diff(self.r)
+        M_enc_cum = jnp.concatenate([
+            jnp.zeros(1, dtype=g.dtype),
+            jnp.cumsum(0.5 * (g[:-1] + g[1:]) * dr),
+        ])
+        self.M_enc_cum = M_enc_cum
 
 
 
@@ -502,7 +488,7 @@ class StellarSimTDep:
             v_i_unit = t_i_unit * jnp.sin(rand_theta) + b_i_unit * jnp.cos(rand_theta)
 
             # Compute circular velocity from spherically-averaged enclosed mass
-            M_enc_at_r = SSF.Enclosed_mass_3d(self.r, self.theta, self.phi, rho_rtp, float(r_orbit))
+            M_enc_at_r = jnp.interp(r_orbit, self.r, self.M_enc_cum)
             v_circ_mag = jnp.sqrt(self.G * M_enc_at_r / r_orbit)
 
             init_pos = r_i
@@ -598,7 +584,7 @@ class StellarSimTDep:
 
             self.no_time_steps = int(self.total_evolve_time * self.u.from_Gyr / new_dt)
 
-            print(f"dt: {self.dt * self.u.to_Gyr:.3f} Gyr")
+            print(f"dt: {self.dt * self.u.to_Gyr:.6f} Gyr")
             print(f"Number of time steps: {self.no_time_steps}")
 
         return aj
@@ -617,60 +603,69 @@ class StellarSimTDep:
             return 1.0
 
     def compute_diagonal_rho_expansion(self):
+        """Time-averaged (diagonal) density using the addition theorem.
 
-        """
-            rho_static(r, theta, phi) = m_tot * sum_{j,m} |a_{j,m}|^2 R_j(r)^2 |Y_{l_j,m}(theta, phi)|^2
-        """
+        Because |a_{j,m}|² is m-independent (isotropic random phases, line 402),
+        the addition theorem Σ_m |Y_{lm}(θ,φ)|² = (2l+1)/4π collapses the
+        angular sum to a constant, giving a spherically symmetric static density:
 
+            ρ_static(r) = total_mass · Σ_j  weight_j · |R_j(r)|²
+            weight_j     = |a_j|² · (2l_j + 1) / (4π)
+
+        Only the (l=0, m=0) multipole is nonzero.
+        No Legendre table, no SHT, no (Nr, T) intermediate.
+        """
         Nj = self.R_j_r_fixed.shape[1]
-        abs_aj_sq = jnp.abs(self.aj) ** 2
 
-        # |Y_lm|^2 = (P_l^|m|(cos theta))^2 — phi-independent and real.
-        L_in = self.L
-        P_table = build_Legendre_table(L_in, self.theta)                       # (L_in, L_in, T)
-        abs_m = jnp.abs(self.lm_pairs_jax[:, 1])
-        Y_abs_sq_t = (P_table[self.lm_pairs_jax[:, 0], abs_m] ** 2).astype(jnp.float64)  # (N_unique, T)
-        T = Y_abs_sq_t.shape[1]
+        # Recover aj² per j-mode: all k-modes sharing the same j carry the same |a|²,
+        # so scatter with at[].set() (last-write) gives the correct value per j.
+        aj_sq_k = jnp.abs(self.aj) ** 2                                       # (Nk,)
+        aj_sq_j = jnp.zeros(Nj, dtype=jnp.float64).at[self.parent_j].set(aj_sq_k)  # (Nj,)
 
-        # M_j_t[j, t] = sum_{k: parent_j[k]=j} |aj[k]|^2 * Y_abs_sq_t[lm_idx[k], t]
-        # Chunked scatter-add over k modes — never materialise the (N_unique, Nj)
-        # dense coefficient matrix.
-        Nmodes_k = abs_aj_sq.shape[0]
-        chunk = 100_000
-
-        M_j_t = jnp.zeros((Nj, T), dtype=jnp.float64)
-        for s in range(0, Nmodes_k, chunk):
-            e = min(s + chunk, Nmodes_k)
-            contrib = abs_aj_sq[s:e, None] * Y_abs_sq_t[self.lm_idx_per_mode[s:e], :]  # (chunk, T)
-            M_j_t = M_j_t.at[self.parent_j[s:e]].add(contrib)
+        weight_j = aj_sq_j * (2.0 * self.l.astype(jnp.float64) + 1.0) / (4.0 * jnp.pi)
+        self.weight_j = weight_j                                               # (Nj,) — reused by Gaunt path
 
         R_sq = (jnp.abs(self.R_j_r_fixed) ** 2).astype(jnp.float64)
-        rho_static_rt = self.total_mass * jnp.einsum('Rj,jt->Rt', R_sq, M_j_t)  # (Nr, T)
+        rho_static_r = self.total_mass * (R_sq @ weight_j)                    # (Nr,)
 
+        if self.SphHT:
+            return rho_static_r
 
-        n_phi = self.phi.shape[0]
-        rho_static_rtp = jnp.broadcast_to(
-            rho_static_rt[:, :, None], rho_static_rt.shape + (n_phi,))
-        rho_static_lms = self.compute_rho_lms_s2fft(rho_static_rtp)
+        # Gaunt path: build (Nr, L_force, 2*L_force-1) with only (l=0, m=0) nonzero.
+        # ∫ρ_static Y*_00 dΩ = ρ_static · sqrt(4π)  (spherically symmetric ρ)
+        Nr      = rho_static_r.shape[0]
+        L_force = self.L_force
+        rho_static_lms = jnp.zeros((Nr, L_force, 2 * L_force - 1), dtype=jnp.complex128)
+        return rho_static_lms.at[:, 0, L_force - 1].set(rho_static_r * jnp.sqrt(4.0 * jnp.pi))
 
-        return rho_static_lms, M_j_t
-
-    def compute_rho_lm_at_particles_diagonal_only(self, R_j_at_particles, M_j_t):
-
+    def compute_rho_lm_at_particles_diagonal_only(self, R_j_at_particles):
         """Time-averaged (diagonal-only) rho_lm at each particle's exact r.
+
+        Because ρ_static is spherically symmetric, only (l=0, m=0) is nonzero:
+            ρ_lm(r_p) = ρ_static(r_p) · sqrt(4π) · δ_{l0} δ_{m0}
+        No SHT needed — just a dot product against weight_j.
         """
+        R_sq_all = (jnp.abs(R_j_at_particles) ** 2).astype(jnp.float64)  # (N_p, Nj)
+        rho_r_p  = self.total_mass * (R_sq_all @ self.weight_j)           # (N_p,)
+        N_p      = rho_r_p.shape[0]
+        L_force  = self.L_force
+        out = jnp.zeros((N_p, L_force, 2 * L_force - 1), dtype=jnp.complex128)
+        return out.at[:, 0, L_force - 1].set(rho_r_p * jnp.sqrt(4.0 * jnp.pi))
 
-        R_sq_all = (jnp.abs(R_j_at_particles) ** 2).astype(jnp.float64)
-        L_max_out = self.L_max_out
-        total_mass = self.total_mass
-        n_phi = self.phi.shape[0]
+    def _flm_extract(self, flm):
+        """Re-index flm from (..., L_max_out, 2*L_max_out-1) to (..., L_force, 2*L_force-1).
 
-        def single(R_sq_at_r):
-            rho_at_r_t = total_mass * jnp.einsum('j,jt->t', R_sq_at_r, M_j_t)  # (T,)
-            rho_at_r = jnp.broadcast_to(rho_at_r_t[:, None], rho_at_r_t.shape + (n_phi,))
-            return s2fft.forward(rho_at_r, L_max_out, sampling='mw', method='jax')
-
-        return jax.vmap(single)(R_sq_all)
+        output_lm_pairs lists every (l, m) with l < L_force, so this is a
+        fully vectorised gather-scatter with no Python loop.
+        """
+        if self.L_force == self.L_max_out:
+            return flm
+        lp  = self.output_lm_pairs            # (N_modes_force, 2)
+        l_a = lp[:, 0]
+        m_a = lp[:, 1]
+        vals = flm[..., l_a, (self.L_max_out - 1) + m_a]
+        out  = jnp.zeros(flm.shape[:-2] + (self.L_force, 2 * self.L_force - 1), dtype=flm.dtype)
+        return out.at[..., l_a, (self.L_force - 1) + m_a].set(vals)
 
     def construct_rho_lms_gaunt(self, aj, parent_j, R_j_r_phased):
 
@@ -681,7 +676,7 @@ class StellarSimTDep:
         rho_lm_gaunt = gf.compute_rho_lm_gaunt(
             aj, R_j_r_phased, parent_j, self.lm_idx_sorted_per_mode,
             self.total_mass,
-            L_max_out=self.L_max_out,
+            L_max_out=self.L_force,
             gaunt_table=self.gaunt_table,
             batch_size = 100_000
         )
@@ -725,7 +720,7 @@ class StellarSimTDep:
                 R_j_r_phased, self.aj, self.parent_j,
                 self.lm_pairs_jax, self.lm_idx_per_mode,
             )
-            rho_lms_full = self.compute_rho_lms_s2fft(rho_rtp)
+            rho_lms_full = self._flm_extract(self.compute_rho_lms_s2fft(rho_rtp))
         else:
             rho_lms_full = self.construct_rho_lms_gaunt(self.aj, self.parent_j, R_j_r_phased)
 
@@ -736,6 +731,125 @@ class StellarSimTDep:
         return self.rho_static_lms + ramp_frac * (rho_lms_full - self.rho_static_lms)
 
 
+    def compute_phi_at_particles_streaming(self, positions_sph, current_phase, ramp_frac, rho_static_r):
+        """Streaming Poisson solve — eliminates rho_lms_below/above entirely.
+
+        Scans over the Nr background radial shells once.  At each shell r_i:
+          1. Build ψ_lm(r_i) via segment-sum → scatter into flm → inverse SHT → |ψ|².
+          2. Pixel-space blend with static profile: ρ_b = ρ_static + ramp*(ρ_full - ρ_static).
+          3. Forward SHT → extract L_force multipoles.
+          4. Accumulate per-particle Poisson integrals I_int / I_ext.
+
+        After the scan, evaluate Φ_lm(r_p) and dΦ_lm/dr_p analytically.
+
+        Memory:  O(N_p × N_modes) carry  +  O(L_max²) per-shell SHT workspace.
+        """
+        particle_rs = positions_sph[:, 0]           # (N_p,)
+        N_p         = particle_rs.shape[0]
+
+        L_max    = self.L_max_out
+        out_lp   = self.output_lm_pairs             # (N_modes, 2)
+        N_modes  = out_lp.shape[0]
+        l_modes  = out_lp[:, 0].astype(jnp.float64)  # (N_modes,) l values
+
+        lm_pairs = self.lm_pairs_jax                # (N_unique, 2) ψ modes
+        N_unique = lm_pairs.shape[0]
+        lm_idx   = self.lm_idx_per_mode
+        aj       = self.aj
+        parent_j = self.parent_j
+        total_mass = self.total_mass
+        G        = self.G
+        r        = self.r                           # (Nr,)
+
+        # Phase the full radial grid once
+        R_j_r_phased = self.R_j_r_fixed * current_phase[None, :]   # (Nr, Nj)
+
+        # Trapezoidal quadrature weights (cell-width per shell)
+        dr_trap = jnp.concatenate([
+            r[1:2]   - r[0:1],
+            0.5 * (r[2:] - r[:-2]),
+            r[-1:]   - r[-2:-1],
+        ])                                          # (Nr,)
+
+        def scan_body(carry, inputs):
+            I_int, I_ext = carry                    # (N_p, N_modes) complex128
+            r_i, dr_i, R_at_r, rho_s = inputs      # (), (), (Nj,), ()  ← scalar now
+
+            # ψ harmonic coefficients at this shell
+            contrib = aj * R_at_r[parent_j]         # (N_k,)
+            s_col   = jnp.zeros(N_unique, dtype=aj.dtype).at[lm_idx].add(contrib)
+
+            # flm → inverse SHT → |ψ|²
+            flm      = jnp.zeros((L_max, 2 * L_max - 1), dtype=aj.dtype)
+            flm      = flm.at[lm_pairs[:, 0], (L_max - 1) + lm_pairs[:, 1]].set(s_col)
+            psi      = s2fft.inverse(flm, L_max, sampling='mw', method='jax')   # (T, P)
+            rho_full = total_mass * jnp.abs(psi) ** 2                           # (T, P) real
+
+            # Pixel-space blend: ρ_static is spherically symmetric → broadcast scalar
+            rho_b    = rho_s + ramp_frac * (rho_full - rho_s)                  # (T, P)
+
+            # Forward SHT → extract L_force modes
+            flm_rho = s2fft.forward(rho_b, L_max, sampling='mw', method='jax')
+            rho_lm  = flm_rho[out_lp[:, 0], (L_max - 1) + out_lp[:, 1]]       # (N_modes,) complex
+
+            # Per-particle radial accumulation
+            is_int = (r_i < particle_rs)[:, None]                               # (N_p, 1) bool
+            dI     = rho_lm[None, :] * dr_i                                     # (1, N_modes)
+
+            I_int = I_int + jnp.where(is_int, dI * r_i ** (l_modes + 2.0),   0.0)
+            I_ext = I_ext + jnp.where(is_int, 0.0, dI * r_i ** (1.0 - l_modes))
+
+            return (I_int, I_ext), None
+
+        # while_loop instead of scan: XLA compiles the body once rather than
+        # unrolling all Nr steps, keeping compile time and memory tractable at
+        # large L.
+        Nr_val = r.shape[0]
+        I0 = jnp.zeros((N_p, N_modes), dtype=jnp.complex128)
+
+        def while_body(state):
+            I_int, I_ext, idx = state
+            (I_int_new, I_ext_new), _ = scan_body(
+                (I_int, I_ext),
+                (r[idx], dr_trap[idx], R_j_r_phased[idx], rho_static_r[idx]),
+            )
+            return I_int_new, I_ext_new, idx + 1
+
+        I_int, I_ext, _ = jax.lax.while_loop(
+            lambda s: s[2] < Nr_val,
+            while_body,
+            (I0, I0, jnp.zeros((), dtype=jnp.int32)),
+        )
+
+        # Φ_lm(r_p) = -4πG/(2l+1) [r_p^{-(l+1)} I_int + r_p^l I_ext]
+        prefac  = -4.0 * jnp.pi * G / (2.0 * l_modes + 1.0)   # (N_modes,)
+        r_p     = particle_rs[:, None]                           # (N_p, 1)
+        l_m     = l_modes[None, :]                              # (1, N_modes)
+
+        phi_lm  = prefac * (r_p ** (-l_m - 1.0) * I_int + r_p **  l_m         * I_ext)
+        dphi_dr = prefac * (-(l_m + 1.0) * r_p ** (-l_m - 2.0) * I_int
+                            +   l_m       * r_p ** ( l_m - 1.0) * I_ext)
+
+        return dphi_dr, phi_lm   # (N_p, N_modes) complex128
+
+    def construct_rho_r(self, R_j_r_phased, aj, parent_j, lm_pairs, lm_idx_per_mode):
+
+        '''
+        Spherically-integrated radial density:
+            rho_r(r) = ∫ ρ(r,θ,φ) sinθ dθ dφ
+                     = total_mass * Σ_lm |ψ_lm(r)|²       (Parseval, orthonormal Y_lm)
+        Avoids materialising any (Nr, θ, φ) grid — only an Nr-length array is built.
+        '''
+        N_unique = lm_pairs.shape[0]
+
+        def slice_to_rho_r(R_at_r):
+            contrib = aj * R_at_r[parent_j]                              # (Nmodes_k,)
+            s_col = jnp.zeros(N_unique, dtype=aj.dtype).at[lm_idx_per_mode].add(contrib)
+            return self.total_mass * jnp.sum(jnp.abs(s_col) ** 2)
+
+        return jax.lax.map(slice_to_rho_r, R_j_r_phased, batch_size=8)   # (Nr,)
+
+
     def construct_rho_rtp(self, R_j_r_phased, aj, parent_j, lm_pairs, lm_idx_per_mode):
 
         '''
@@ -743,31 +857,23 @@ class StellarSimTDep:
         Instead its just an inverse SHT to get psi on the dense grid, then square and forward SHT back to get rho_lm.
         '''
 
-        Nj = R_j_r_phased.shape[1]
-        Nr = R_j_r_phased.shape[0]
         L_out = self.L_max_out
         N_unique = lm_pairs.shape[0]
-        Nmodes_k = aj.shape[0]
-        chunk = 100_000
 
-        # S_ur[u, r] = sum_{k: lm_idx[k]=u} aj[k] * R_j_r_phased[r, parent_j[k]]
-        # Chunked scatter-add over k modes — never materialise the (N_unique, Nj)
-        # dense coefficient matrix (intractable at high m22).
-        S_ur = jnp.zeros((N_unique, Nr), dtype=aj.dtype)
-        for s in range(0, Nmodes_k, chunk):
-            e = min(s + chunk, Nmodes_k)
-            contrib = aj[s:e, None] * R_j_r_phased[:, parent_j[s:e]].T   # (chunk, Nr)
-            S_ur = S_ur.at[lm_idx_per_mode[s:e]].add(contrib)
+        # Stream over radii: for each r, build the (N_unique,) coefficient
+        # column on-the-fly via segment-sum, scatter into flm, run inverse SHT,
+        # and square. Avoids both the dense (N_unique, Nr) S_ur and the dense
+        # (Nr, L_out, 2*L_out-1) flm_r tensors.
+        def slice_to_rho(R_at_r):
+            contrib = aj * R_at_r[parent_j]                              # (Nmodes_k,)
+            s_col = jnp.zeros(N_unique, dtype=aj.dtype).at[lm_idx_per_mode].add(contrib)
 
+            f = jnp.zeros((L_out, 2 * L_out - 1), dtype=aj.dtype)
+            f = f.at[lm_pairs[:, 0], (L_out - 1) + lm_pairs[:, 1]].set(s_col)
+            psi = s2fft.inverse(f, L_out, sampling='mw', method='jax')
+            return self.total_mass * (jnp.abs(psi) ** 2)
 
-        flm_r = jnp.zeros((Nr, L_out, 2 * L_out - 1), dtype=aj.dtype)
-        flm_r = flm_r.at[:, lm_pairs[:, 0], (L_out - 1) + lm_pairs[:, 1]].set(S_ur.T)
-
-        psi_rtp = jax.vmap(
-            lambda f: s2fft.inverse(f, L_out, sampling='mw', method='jax')
-        )(flm_r)                                                        # (Nr, T, P)
-
-        rho_rtp = self.total_mass * (jnp.abs(psi_rtp) ** 2)
+        rho_rtp = jax.lax.map(slice_to_rho, R_j_r_phased, batch_size=64) # (Nr, T, P)
         return rho_rtp
 
 
@@ -789,7 +895,7 @@ class StellarSimTDep:
         F_all = jax.lax.map(single_F, R_j_phased_at_parts)                          # (N_particles, N_unique_gaunt)
 
         return gf.compute_rho_lm_gaunt_F(
-            F_all, self.total_mass, self.L_max_out,
+            F_all, self.total_mass, self.L_force,
             all_i, all_j, all_G, all_Lf,
             batch_size=100_000,
         )
@@ -803,9 +909,11 @@ class StellarSimTDep:
         """
 
         L_max_out = self.L_max_out
+        L_force   = self.L_force
         total_mass = self.total_mass
         lm_pairs = self.lm_pairs_jax
         N_unique = lm_pairs.shape[0]
+        out_lp   = self.output_lm_pairs   # (N_modes_force, 2)
 
         def single(R_j_phased_at_part):
             contrib = aj * R_j_phased_at_part[parent_j]                            # (Nmodes_k,)
@@ -814,9 +922,12 @@ class StellarSimTDep:
             flm = flm.at[lm_pairs[:, 0], (L_max_out - 1) + lm_pairs[:, 1]].set(S_u)
             psi_at_r = s2fft.inverse(flm, L_max_out, sampling='mw', method='jax')
             rho_at_r = total_mass * jnp.abs(psi_at_r) ** 2
-            return s2fft.forward(rho_at_r, L_max_out, sampling='mw', method='jax')
+            flm_rho  = s2fft.forward(rho_at_r, L_max_out, sampling='mw', method='jax')
+            vals = flm_rho[out_lp[:, 0], (L_max_out - 1) + out_lp[:, 1]]
+            out  = jnp.zeros((L_force, 2 * L_force - 1), dtype=flm_rho.dtype)
+            return out.at[out_lp[:, 0], (L_force - 1) + out_lp[:, 1]].set(vals)
 
-        return jax.lax.map(single, R_j_phased_at_parts)   # (N_particles, L_max_out, 2*L_max_out-1)
+        return jax.lax.map(single, R_j_phased_at_parts)   # (N_particles, L_force, 2*L_force-1)
 
     def insert_particle_rholm_and_get_philm(self, r_pos_sph, rho_lm_at_particle, rho_lms_below, rho_lms_above):
 
@@ -851,7 +962,7 @@ class StellarSimTDep:
 
         dphi_lm_dr_at_r, phi_lm_at_r = compute_phi_lm_and_deriv(
             rho_lm_updated, r_updated, self.output_lm_pairs,
-            mask_int, mask_ext, int(self.L_max_out), self.G, particle_r
+            mask_int, mask_ext, int(self.L_force), self.G, particle_r
         )
 
         # if self.plot and not isinstance(particle_r, jax.core.Tracer):
@@ -892,7 +1003,7 @@ class StellarSimTDep:
 
     def calc_rho_lm_at_parts_and_call_insert(self, positions_sph, current_phase, radial_eigenmode_params,
                               aj, parent_j, lm_idx, all_i, all_j,
-                              all_G, all_Lf, rho_lms_below, rho_lms_above, M_j_t, ramp_frac):
+                              all_G, all_Lf, rho_lms_below, rho_lms_above, ramp_frac):
 
         """JIT-compilable: radial basis evaluation + batched rho_lm + vmap
         over the per-particle insertion step.
@@ -919,7 +1030,7 @@ class StellarSimTDep:
 
         # Time-averaged (diagonal-only) rho_lm at the same radii. Used as
         # the baseline for the ramp.
-        rho_lm_at_particles_static = self.compute_rho_lm_at_particles_diagonal_only(R_j_at_particles, M_j_t)
+        rho_lm_at_particles_static = self.compute_rho_lm_at_particles_diagonal_only(R_j_at_particles)
 
 
         rho_lm_at_particles = (rho_lm_at_particles_static + 
@@ -960,30 +1071,43 @@ class StellarSimTDep:
         With JIT-compilable radial eval + rho_lm + insertion, followed by a non-JIT angular contraction to get accs.
         '''
 
-        if not hasattr(self, 'calc_rho_lm_at_parts_and_call_insert_jit'):
+        first_call = not hasattr(self, '_force_kernel_jit')
+        if first_call:
             self._eval_library = eval_library
-            self.calc_rho_lm_at_parts_and_call_insert_jit = jax.jit(self.calc_rho_lm_at_parts_and_call_insert)
+            if self.SphHT:
+                self._force_kernel_jit = jax.jit(self.compute_phi_at_particles_streaming)
+            else:
+                self._force_kernel_jit = jax.jit(self.calc_rho_lm_at_parts_and_call_insert)
             self.combine_acc_jit = jax.jit(StellarSimTDep.combine_acc)
+            print(f"  [JIT] Compiling force kernel (L_force={self.L_force}, Nr={len(self.r)}) — this may take several minutes...", flush=True)
 
+        if self.SphHT:
+            dphi_lm_dr_at_parts, phi_lm_at_parts = self._force_kernel_jit(
+                positions_sph,
+                self.current_phase,
+                self.current_ramp_frac,
+                self.rho_static_r,
+            )
+        else:
+            lm_idx = self.lm_idx_sorted_per_mode
+            dphi_lm_dr_at_parts, phi_lm_at_parts = self._force_kernel_jit(
+                positions_sph,
+                self.current_phase,
+                eigenstate_lib.radial_eigenmode_params,
+                self.aj,
+                self.parent_j,
+                lm_idx,
+                self._jit_all_i,
+                self._jit_all_j,
+                self._jit_all_G,
+                self._jit_all_Lf,
+                self.rho_lms_below,
+                self.rho_lms_above,
+                self.current_ramp_frac,
+            )
 
-        lm_idx = self.lm_idx_per_mode if self.SphHT else self.lm_idx_sorted_per_mode
-
-        dphi_lm_dr_at_parts, phi_lm_at_parts = self.calc_rho_lm_at_parts_and_call_insert_jit(
-            positions_sph,
-            self.current_phase,
-            eigenstate_lib.radial_eigenmode_params,
-            self.aj,
-            self.parent_j,
-            lm_idx,
-            self._jit_all_i,
-            self._jit_all_j,
-            self._jit_all_G,
-            self._jit_all_Lf,
-            self.rho_lms_below,
-            self.rho_lms_above,
-            self.M_j_t,
-            self.current_ramp_frac,
-        )
+        if first_call:
+            print("  [JIT] Force kernel compiled and first evaluation done.", flush=True)
 
         # if self.plot:
         #     # Eagerly recompute rho_lm for particle 0 so matplotlib gets concrete
@@ -1089,12 +1213,15 @@ class StellarSimTDep:
 
         L_max_out = 2 * self.L - 1  # captures all density harmonics up to l1+l2 <= 2*(L-1)
         self.L_max_out = L_max_out
+        self.L_force = max(1, round(self.L_force_frac * L_max_out))
+        print(f"L_max_out (wavefunction) = {L_max_out},  L_force (force solver) = {self.L_force}"
+              + (f"  ({self.L_force_frac:.0%})" if self.L_force < L_max_out else ""))
 
 
         if self.SphHT == False:
 
             # Precompute Gaunt table ONCE — reuse this across all time steps
-            gaunt_table = gf.precompute_gaunt_table(self.lm_l, self.lm_m, L_max_out)
+            gaunt_table = gf.precompute_gaunt_table(self.lm_l, self.lm_m, self.L_force)
             self.gaunt_table = gaunt_table
 
             _, _, _, _, unique_lm = gaunt_table
@@ -1118,7 +1245,7 @@ class StellarSimTDep:
 
         # Pre-convert lm_pairs to numpy once so scipy sph_harm_y receives a
         # plain numpy array and avoids a GPU to CPU device transfer every sub-step.
-        out_lm = [(L, M) for L in range(L_max_out) for M in range(-L, L+1)]
+        out_lm = [(L, M) for L in range(self.L_force) for M in range(-L, L+1)]
         output_lm_pairs = jnp.array(out_lm)
 
         self.output_lm_pairs = output_lm_pairs
@@ -1142,16 +1269,23 @@ class StellarSimTDep:
         print(f"Total: {self.no_time_steps} steps")
 
 
-        # One-shot precomputation of the time-averaged (diagonal-only) density.
-        self.rho_static_lms, self.M_j_t = self.compute_diagonal_rho_expansion()
+        # One-shot precomputation of the time-averaged density (also sets self.weight_j).
+        # SphHT path returns rho_static_r (Nr,); Gaunt path returns rho_static_lms (Nr, L_force, 2*L_force-1).
+        _static = self.compute_diagonal_rho_expansion()
 
-        #Build_rho_lms_for_timestep(timestep) - needs rho_static_lms computed and in self
-        self.rho_lms = self.Build_rho_lms_for_timestep(0)
-
-        rho_lm_below = jnp.concatenate([self.rho_lms, self.rho_lms[-1:]], axis=0)    # (Nr+1, L, 2L-1)
-        rho_lm_above = jnp.concatenate([self.rho_lms[:1], self.rho_lms], axis=0)     # (Nr+1, L, 2L-1)
-        self.rho_lms_below = rho_lm_below
-        self.rho_lms_above = rho_lm_above
+        if self.SphHT:
+            # Streaming path: store spherically-symmetric radial profile; SHTs happen on-the-fly.
+            self.rho_static_r = _static
+            self.current_phase     = jnp.exp(-1j * self.eigen_energies * 0 * self.dt)
+            self.current_ramp_frac = jnp.float64(self.ramp_frac_for_step(0))
+        else:
+            # Gaunt path: build harmonic-space grid + shift arrays for insertion scheme.
+            self.rho_static_lms = _static
+            self.rho_lms = self.Build_rho_lms_for_timestep(0)
+            rho_lm_below = jnp.concatenate([self.rho_lms, self.rho_lms[-1:]], axis=0)
+            rho_lm_above = jnp.concatenate([self.rho_lms[:1], self.rho_lms], axis=0)
+            self.rho_lms_below = rho_lm_below
+            self.rho_lms_above = rho_lm_above
 
 
         ###################################
@@ -1309,12 +1443,17 @@ class StellarSimTDep:
             print(f"Time step {self.time_step + 1} / {self.no_time_steps}")
 
 
-            self.rho_lms = self.Build_rho_lms_for_timestep(self.time_step)
-
-            rho_lm_below = jnp.concatenate([self.rho_lms, self.rho_lms[-1:]], axis=0)    # (Nr+1, L, 2L-1)
-            rho_lm_above = jnp.concatenate([self.rho_lms[:1], self.rho_lms], axis=0)     # (Nr+1, L, 2L-1)
-            self.rho_lms_below = rho_lm_below
-            self.rho_lms_above = rho_lm_above
+            if self.SphHT:
+                # Streaming path: update phase + ramp; SHT + Poisson happens inside force kernel.
+                self.current_phase     = jnp.exp(-1j * self.eigen_energies * self.time_step * self.dt)
+                self.current_ramp_frac = jnp.float64(self.ramp_frac_for_step(self.time_step))
+            else:
+                # Gaunt path: build full harmonic-space grid for insertion scheme.
+                self.rho_lms = self.Build_rho_lms_for_timestep(self.time_step)
+                rho_lm_below = jnp.concatenate([self.rho_lms, self.rho_lms[-1:]], axis=0)
+                rho_lm_above = jnp.concatenate([self.rho_lms[:1], self.rho_lms], axis=0)
+                self.rho_lms_below = rho_lm_below
+                self.rho_lms_above = rho_lm_above
 
 
             # Time step all particles (IAS15 calls additional_forces_step ~8× internally,
@@ -1325,7 +1464,11 @@ class StellarSimTDep:
             print(f"Time stepping all particles completed in {end - start:.2f} seconds")
 
 
-            self.current_phase = jnp.exp(-1j * self.eigen_energies * (self.time_step + 1) * self.dt / 1)
+            if self.SphHT:
+                self.current_phase     = jnp.exp(-1j * self.eigen_energies * (self.time_step + 1) * self.dt)
+                self.current_ramp_frac = jnp.float64(self.ramp_frac_for_step(self.time_step + 1))
+            else:
+                self.current_phase = jnp.exp(-1j * self.eigen_energies * (self.time_step + 1) * self.dt)
             # Compute phi at updated particle positions for potential energy tracking
             r_pos_sphs_new = jnp.array([p.r_pos_sph for p in self.particles])
             _, _, _, phi_lm_new, Ylm_new = self.construct_acc_master_func(

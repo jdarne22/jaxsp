@@ -1,6 +1,6 @@
 import os
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 #os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 #os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"   # or: "cuda_async"
@@ -21,6 +21,8 @@ import A_nl_altered_sims as A_nl
 
 import Analytic_t_dep_sim_Ylm_skip as ATD_Ylm_skip
 
+import Analytic_t_dep_sim_Ylm_skip_CC_mem as ATD_Ylm_skip_CC_mem
+
 
 import jaxsp as jsp
 
@@ -39,6 +41,7 @@ importlib.reload(ATG)
 importlib.reload(ATD)
 importlib.reload(A_nl)
 importlib.reload(ATD_Ylm_skip)
+importlib.reload(ATD_Ylm_skip_CC_mem)
 
 
 
@@ -310,109 +313,211 @@ importlib.reload(ATD_Ylm_skip)
 #----------------------------------------------------------------------------------
 # ENTERING T DEP SIMS
 
-m22_list = [2]
-R0_list_kpc = [0.19, 1]
+# m22_list = [2]
+# R0_list_kpc = [0.19, 1]
 
 
-SphHT = True
+# SphHT = True
+# integrator = 'leapfrog'
+# plot = False
+# dt_override = 10
+# ramp_time = 0.5
+
+
+# for m22 in m22_list:
+#     for R0 in R0_list_kpc:
+
+#         print('Running t dep sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
+
+#         t_dep_leapfrog = ATD.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 1, 
+#                                     r_max_enclosing_frac = 0.99, no_radius_bins = 2000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override, ramp_time=ramp_time)
+        
+
+#         t_dep_leapfrog.run_simulation()
+
+
+#         positions_all = np.array([p.positions_xyz for p in t_dep_leapfrog.particles])  # (N_particles, N_steps+1, 3)
+#         r_all         = np.array([p.r_values      for p in t_dep_leapfrog.particles])  # (N_particles, N_steps+1)
+#         v_disp_all    = np.array([p.stellar_v_disp for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1)
+#         kinetic_energy_all = np.array([p.kinetic_energy for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1)
+#         potential_energy_all = np.array([p.potential_energy for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1)
+#         ang_mom_all = np.array([p.ang_mom for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1, 3)
+
+#         time_step = t_dep_leapfrog.time_step
+#         stellar_v_disp2 = np.mean(v_disp_all, axis=0)  # Average over particles
+
+#         average_r = np.mean(r_all, axis=0)  # Average over particles
+
+#         no_time_steps = t_dep_leapfrog.no_time_steps
+        
+#         x = np.arange(no_time_steps + 1)  # Time steps array
+
+
+#         plt.plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, average_r * t_dep_leapfrog.u.to_Kpc, label='Average Particle Radius')
+#         for particle in range(r_all.shape[0]):
+#             plt.plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, r_all[particle] * t_dep_leapfrog.u.to_Kpc, alpha = 0.2, color='gray')
+#         plt.axhline(t_dep_leapfrog.r_half, color='r', linestyle='--', label='Initial Particle Position (r_half)')
+
+#         plt.xlabel('Time [Gyr]')
+#         plt.ylabel('Average Stellar Radius [Kpc]')
+#         plt.title('Average Stellar Radius over Time')
+
+#         # Timescale diagnostics
+#         v0 = np.sqrt(2 * kinetic_energy_all[:, 0])
+#         mean_T_orb = float(np.mean(2 * np.pi * r_all[:, 0] / v0) * t_dep_leapfrog.u.to_Gyr)
+
+#         lambda_db_kpc = 19.15 / (t_dep_leapfrog.m22 * v0 * t_dep_leapfrog.u.to_kms)
+#         T_c = lambda_db_kpc / (v0 * t_dep_leapfrog.u.to_Kpc) * t_dep_leapfrog.u.to_Gyr
+#         plt.axhline(np.mean(lambda_db_kpc), color='g', linestyle='--', label='$\\lambda_{{\\rm db}}$')
+
+#         E = np.array(t_dep_leapfrog.eigen_energies)
+#         freq_diff = np.abs(E[:, None] - E[None, :])
+#         T_beat = (2 * np.pi / freq_diff) * t_dep_leapfrog.u.to_Gyr
+#         min_T_beat = np.min(T_beat[np.isfinite(T_beat)])
+#         max_T_beat = np.max(T_beat[np.isfinite(T_beat)])
+
+#         dt_Gyr = t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr
+
+
+#         info = (
+#             f"$T_{{\\rm orb}}$ (mean) = {mean_T_orb:.3f} Gyr\n"
+#             f"$T_{{\\rm c}}$ = {float(np.mean(T_c)):.3f} Gyr\n"
+#             f"Beat time band: [{min_T_beat:.3f}, {max_T_beat:.3f}] Gyr\n"
+#             f"$\\Delta t$ = {dt_Gyr:.4f} Gyr"
+#         )
+#         plt.text(1.02, 0.98, info, transform=plt.gca().transAxes,
+#                 verticalalignment='top', fontsize=9,
+#                 bbox=dict(boxstyle='round', facecolor='paleturquoise', alpha=0.6))
+
+#         plt.legend(bbox_to_anchor=(1, 0.7))
+
+#         plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/DIFF/t_dep_lf_m{m22}_R{R0}.png', dpi=300, bbox_inches='tight')
+#         plt.close()
+
+
+#         fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+#         for particle in range(ang_mom_all.shape[0]):
+#             ax[0].plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, (kinetic_energy_all[particle] + potential_energy_all[particle]), label='Total Energy')
+#         ax[0].set_xlabel('Time [Gyr]')
+#         ax[0].set_ylabel('Total Energy [J]')
+#         ax[0].set_title('Total Energy over Time')
+
+
+
+
+#         for particle in range(ang_mom_all.shape[0]):
+#             ax[1].plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, ang_mom_all[particle], label='Total angular momentum')
+#         ax[1].set_xlabel('Time [Gyr]')
+#         ax[1].set_ylabel('Total angular momentum [kg m^2/s]')
+#         ax[1].set_title('Total angular momentum over Time')
+
+
+#         plt.tight_layout()
+#         plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/DIFF/t_dep_lf_eng_amom_m{m22}_R{R0}.png', dpi=300, bbox_inches='tight')
+#         plt.close()
+
+
+SphHT = False
 integrator = 'leapfrog'
 plot = False
-dt_override = 10
-ramp_time = 0.5
+dt_override = 2
+ramp_time = 1
+L_force_frac = 0.1
+
+m22 = 15
+R0 = 0.19
 
 
-for m22 in m22_list:
-    for R0 in R0_list_kpc:
-
-        print('Running t dep sim for m22 =', m22, 'and R0 =', R0, 'kpc ...', flush=True)
-
-        t_dep_leapfrog = ATD.StellarSimTDep(m22 = m22, r_half = R0, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 1, 
-                                    r_max_enclosing_frac = 0.99, no_radius_bins = 2000, SphHT = SphHT, integrator = integrator, plot = plot, dt_override=dt_override, ramp_time=ramp_time)
-        
-
-        t_dep_leapfrog.run_simulation()
+sim = ATD_Ylm_skip_CC_mem.StellarSimTDep(m22 = m22, r_half = R0, r_half_width = 0.1, no_of_particles = 5, no_time_steps = 100, total_evolve_time = 10, r_min = 20, 
+                               r_max_enclosing_frac = 0.99, no_radius_bins = 512, SphHT = SphHT, integrator = integrator, 
+                               plot = plot, dt_override=dt_override, ramp_time=ramp_time, L_force_frac=L_force_frac)
 
 
-        positions_all = np.array([p.positions_xyz for p in t_dep_leapfrog.particles])  # (N_particles, N_steps+1, 3)
-        r_all         = np.array([p.r_values      for p in t_dep_leapfrog.particles])  # (N_particles, N_steps+1)
-        v_disp_all    = np.array([p.stellar_v_disp for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1)
-        kinetic_energy_all = np.array([p.kinetic_energy for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1)
-        potential_energy_all = np.array([p.potential_energy for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1)
-        ang_mom_all = np.array([p.ang_mom for p in t_dep_leapfrog.particles]) # (N_particles, N_steps+1, 3)
-
-        time_step = t_dep_leapfrog.time_step
-        stellar_v_disp2 = np.mean(v_disp_all, axis=0)  # Average over particles
-
-        average_r = np.mean(r_all, axis=0)  # Average over particles
-
-        no_time_steps = t_dep_leapfrog.no_time_steps
-        
-        x = np.arange(no_time_steps + 1)  # Time steps array
+sim.run_simulation()
 
 
-        plt.plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, average_r * t_dep_leapfrog.u.to_Kpc, label='Average Particle Radius')
-        for particle in range(r_all.shape[0]):
-            plt.plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, r_all[particle] * t_dep_leapfrog.u.to_Kpc, alpha = 0.2, color='gray')
-        plt.axhline(t_dep_leapfrog.r_half, color='r', linestyle='--', label='Initial Particle Position (r_half)')
+positions_all = np.array([p.positions_xyz for p in sim.particles])  # (N_particles, N_steps+1, 3)
+r_all         = np.array([p.r_values      for p in sim.particles])  # (N_particles, N_steps+1)
+v_disp_all    = np.array([p.stellar_v_disp for p in sim.particles]) # (N_particles, N_steps+1)
+kinetic_energy_all = np.array([p.kinetic_energy for p in sim.particles]) # (N_particles, N_steps+1)
+potential_energy_all = np.array([p.potential_energy for p in sim.particles]) # (N_particles, N_steps+1)
+ang_mom_all = np.array([p.ang_mom for p in sim.particles]) # (N_particles, N_steps+1, 3)
 
-        plt.xlabel('Time [Gyr]')
-        plt.ylabel('Average Stellar Radius [Kpc]')
-        plt.title('Average Stellar Radius over Time')
+time_step = sim.time_step
+stellar_v_disp2 = np.mean(v_disp_all, axis=0)  # Average over particles
 
-        # Timescale diagnostics
-        v0 = np.sqrt(2 * kinetic_energy_all[:, 0])
-        mean_T_orb = float(np.mean(2 * np.pi * r_all[:, 0] / v0) * t_dep_leapfrog.u.to_Gyr)
+average_r = np.mean(r_all, axis=0)  # Average over particles
 
-        lambda_db_kpc = 19.15 / (t_dep_leapfrog.m22 * v0 * t_dep_leapfrog.u.to_kms)
-        T_c = lambda_db_kpc / (v0 * t_dep_leapfrog.u.to_Kpc) * t_dep_leapfrog.u.to_Gyr
-        plt.axhline(np.mean(lambda_db_kpc), color='g', linestyle='--', label='$\\lambda_{{\\rm db}}$')
+no_time_steps = sim.no_time_steps
 
-        E = np.array(t_dep_leapfrog.eigen_energies)
-        freq_diff = np.abs(E[:, None] - E[None, :])
-        T_beat = (2 * np.pi / freq_diff) * t_dep_leapfrog.u.to_Gyr
-        min_T_beat = np.min(T_beat[np.isfinite(T_beat)])
-        max_T_beat = np.max(T_beat[np.isfinite(T_beat)])
-
-        dt_Gyr = t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr
+x = np.arange(no_time_steps + 1)  # Time steps array
 
 
-        info = (
-            f"$T_{{\\rm orb}}$ (mean) = {mean_T_orb:.3f} Gyr\n"
-            f"$T_{{\\rm c}}$ = {float(np.mean(T_c)):.3f} Gyr\n"
-            f"Beat time band: [{min_T_beat:.3f}, {max_T_beat:.3f}] Gyr\n"
-            f"$\\Delta t$ = {dt_Gyr:.4f} Gyr"
-        )
-        plt.text(1.02, 0.98, info, transform=plt.gca().transAxes,
-                verticalalignment='top', fontsize=9,
-                bbox=dict(boxstyle='round', facecolor='paleturquoise', alpha=0.6))
+plt.plot(x * sim.dt * sim.u.to_Gyr, average_r * sim.u.to_Kpc, label='Average Particle Radius')
+for particle in range(r_all.shape[0]):
+    plt.plot(x * sim.dt * sim.u.to_Gyr, r_all[particle] * sim.u.to_Kpc, alpha = 0.2, color='gray')
+plt.axhline(sim.r_half, color='r', linestyle='--', label='Initial Particle Position (r_half)')
 
-        plt.legend(bbox_to_anchor=(1, 0.7))
+plt.xlabel('Time [Gyr]')
+plt.ylabel('Average Stellar Radius [Kpc]')
+plt.title('Average Stellar Radius over Time')
 
-        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/DIFF/t_dep_lf_m{m22}_R{R0}.png', dpi=300, bbox_inches='tight')
-        plt.close()
+# Timescale diagnostics
+v0 = np.sqrt(2 * kinetic_energy_all[:, 0])
+mean_T_orb = float(np.mean(2 * np.pi * r_all[:, 0] / v0) * sim.u.to_Gyr)
+
+lambda_db_kpc = 19.15 / (sim.m22 * v0 * sim.u.to_kms)
+T_c = lambda_db_kpc / (v0 * sim.u.to_Kpc) * sim.u.to_Gyr
+plt.axhline(np.mean(lambda_db_kpc), color='g', linestyle='--', label='$\\lambda_{{\\rm db}}$')
+
+E = np.array(sim.eigen_energies)
+freq_diff = np.abs(E[:, None] - E[None, :])
+T_beat = (2 * np.pi / freq_diff) * sim.u.to_Gyr
+min_T_beat = np.min(T_beat[np.isfinite(T_beat)])
+max_T_beat = np.max(T_beat[np.isfinite(T_beat)])
+
+dt_Gyr = sim.dt * sim.u.to_Gyr
 
 
-        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+info = (
+    f"$T_{{\\rm orb}}$ (mean) = {mean_T_orb:.3f} Gyr\n"
+    f"$T_{{\\rm c}}$ = {float(np.mean(T_c)):.3f} Gyr\n"
+    f"Beat time band: [{min_T_beat:.3f}, {max_T_beat:.3f}] Gyr\n"
+    f"$\\Delta t$ = {dt_Gyr:.4f} Gyr"
+)
+plt.text(1.02, 0.98, info, transform=plt.gca().transAxes,
+        verticalalignment='top', fontsize=9,
+        bbox=dict(boxstyle='round', facecolor='paleturquoise', alpha=0.6))
 
-        for particle in range(ang_mom_all.shape[0]):
-            ax[0].plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, (kinetic_energy_all[particle] + potential_energy_all[particle]), label='Total Energy')
-        ax[0].set_xlabel('Time [Gyr]')
-        ax[0].set_ylabel('Total Energy [J]')
-        ax[0].set_title('Total Energy over Time')
+plt.legend(bbox_to_anchor=(1, 0.7))
+
+plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/t_dep_lf_m{m22}_R{R0}.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+for particle in range(ang_mom_all.shape[0]):
+    ax[0].plot(x * sim.dt * sim.u.to_Gyr, (kinetic_energy_all[particle] + potential_energy_all[particle]), label='Total Energy')
+ax[0].set_xlabel('Time [Gyr]')
+ax[0].set_ylabel('Total Energy [J]')
+ax[0].set_title('Total Energy over Time')
 
 
 
 
-        for particle in range(ang_mom_all.shape[0]):
-            ax[1].plot(x * t_dep_leapfrog.dt * t_dep_leapfrog.u.to_Gyr, ang_mom_all[particle], label='Total angular momentum')
-        ax[1].set_xlabel('Time [Gyr]')
-        ax[1].set_ylabel('Total angular momentum [kg m^2/s]')
-        ax[1].set_title('Total angular momentum over Time')
+for particle in range(ang_mom_all.shape[0]):
+    ax[1].plot(x * sim.dt * sim.u.to_Gyr, ang_mom_all[particle], label='Total angular momentum')
+ax[1].set_xlabel('Time [Gyr]')
+ax[1].set_ylabel('Total angular momentum [kg m^2/s]')
+ax[1].set_title('Total angular momentum over Time')
 
 
-        plt.tight_layout()
-        plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/DIFF/t_dep_lf_eng_amom_m{m22}_R{R0}.png', dpi=300, bbox_inches='tight')
-        plt.close()
+plt.tight_layout()
+plt.savefig(f'/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/T_dep/t_dep_lf_eng_amom_m{m22}_R{R0}.png', dpi=300, bbox_inches='tight')
+plt.close()
+
 
 
 # #----------------------------------------------------------------------------------

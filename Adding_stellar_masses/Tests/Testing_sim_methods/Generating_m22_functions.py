@@ -42,7 +42,7 @@ importlib.reload(gf)
 
 
 
-m22_list = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+m22_list = [45, 50]
 R_bins = [1000]
 
 
@@ -139,7 +139,7 @@ for m22 in m22_list:
             r = jnp.logspace(jnp.log10(rmin), jnp.log10(rmax), R_bin)
 
             Nj = eigenstate_lib.J
-            chunk = 512
+            chunk = 256
             R_j_r = jnp.concatenate(
                 [eval_library(r, jax.tree.map(lambda x: x[i:i+chunk], eigenstate_lib.radial_eigenmode_params))
                  for i in range(0, Nj, chunk)],
