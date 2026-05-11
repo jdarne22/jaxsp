@@ -21,8 +21,6 @@ import A_nl_altered_sims as A_nl
 
 import Analytic_t_dep_sim_Ylm_skip as ATD_Ylm_skip
 
-import Analytic_t_dep_sim_Ylm_skip_CC_mem as ATD_Ylm_skip_CC_mem
-
 
 import jaxsp as jsp
 
@@ -41,7 +39,6 @@ importlib.reload(ATG)
 importlib.reload(ATD)
 importlib.reload(A_nl)
 importlib.reload(ATD_Ylm_skip)
-importlib.reload(ATD_Ylm_skip_CC_mem)
 
 
 
@@ -429,7 +426,7 @@ m22 = 15
 R0 = 0.19
 
 
-sim = ATD_Ylm_skip_CC_mem.StellarSimTDep(m22 = m22, r_half = R0, r_half_width = 0.1, no_of_particles = 5, no_time_steps = 100, total_evolve_time = 10, r_min = 20, 
+sim = ATD_Ylm_skip.StellarSimTDep(m22 = m22, r_half = R0, r_half_width = 0.1, no_of_particles = 5, no_time_steps = 100, total_evolve_time = 10, r_min = 20, 
                                r_max_enclosing_frac = 0.99, no_radius_bins = 512, SphHT = SphHT, integrator = integrator, 
                                plot = plot, dt_override=dt_override, ramp_time=ramp_time, L_force_frac=L_force_frac)
 

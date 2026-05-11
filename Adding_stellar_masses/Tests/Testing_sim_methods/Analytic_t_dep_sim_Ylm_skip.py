@@ -123,14 +123,14 @@ class Simulation_Particle:
         self.u = u
 
         # Current Cartesian state
-        self.r_pos = jnp.array(init_pos_cart)   # (3,)
-        self.v     = jnp.array(init_vel_cart)    # (3,)
+        self.r_pos = np.array(init_pos_cart)   # (3,)
+        self.v     = np.array(init_vel_cart)    # (3,)
 
         # Convert to spherical for initial record
         self.r_pos_sph = SSF.Cartesian_to_sph(self.r_pos[0], self.r_pos[1], self.r_pos[2])
         self.v_sph = SSF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2],self.v[0], self.v[1], self.v[2])
 
-        # History buffers (same structure as original StellarSimTDep)
+
         self.velocities      = [self.v_sph]
         self.velocities_cart = [self.v]
         self.stellar_v_disp = [0]
@@ -139,20 +139,27 @@ class Simulation_Particle:
         self.positions_xyz  = [[float(self.r_pos[0]), float(self.r_pos[1]), float(self.r_pos[2])]]
 
         self.potential_energy = []
-        self.kinetic_energy = [1/2 * jnp.sum(self.v**2)]
-        self.ang_mom = [jnp.linalg.norm(jnp.cross(self.r_pos, self.v))]
+        self.kinetic_energy = [1/2 * np.sum(self.v**2)]
+        self.ang_mom = [np.linalg.norm(np.cross(self.r_pos, self.v))]
 
         self.time_step = 0
-        
+
+
     def Change_to_new_vel(self, v_corrected):
 
-        self.v = jnp.array(v_corrected)
+        self.v = np.array(v_corrected)
         self.v_sph = SSF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2], v_corrected[0], v_corrected[1], v_corrected[2])
         self.velocities      = [self.v_sph]
         self.velocities_cart = [self.v]
 
-        self.kinetic_energy = [1/2 * jnp.sum(self.v**2)]
-        self.ang_mom = [jnp.linalg.norm(jnp.cross(self.r_pos, self.v))]
+        self.kinetic_energy = [1/2 * np.sum(self.v**2)]
+        self.ang_mom = [np.linalg.norm(np.cross(self.r_pos, self.v))]
+
+    def Create_V_array(self, no_time_steps):
+        # Preallocate (no_time_steps + 1, 3) so row 0 holds the initial v_sph
+        # and rows 1..no_time_steps hold the values written by update_state.
+        self.velocities_arr = np.zeros((no_time_steps + 1, 3))
+        self.velocities_arr[0] = np.asarray(self.v_sph)
 
 
     def update_state(self, new_pos_cart, new_vel_cart):
@@ -161,33 +168,37 @@ class Simulation_Particle:
         Cartesian and spherical state and append to history arrays.
 
         """
-        self.r_pos = jnp.array(new_pos_cart)
-        self.v     = jnp.array(new_vel_cart)
+        x, y, z    = float(new_pos_cart[0]), float(new_pos_cart[1]), float(new_pos_cart[2])
+        vx, vy, vz = float(new_vel_cart[0]), float(new_vel_cart[1]), float(new_vel_cart[2])
 
-        self.r_pos_sph = SSF.Cartesian_to_sph(self.r_pos[0], self.r_pos[1], self.r_pos[2])
-        self.v_sph = SSF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2], self.v[0], self.v[1], self.v[2])
+        self.r_pos = np.array([x, y, z])
+        self.v     = np.array([vx, vy, vz])
+
+        r, theta, phi      = SSF.Cartesian_to_sph_np(x, y, z)
+        vr, vtheta, vphi   = SSF.Cartesian_to_sph_vel_np(x, y, z, vx, vy, vz)
+        self.r_pos_sph     = np.array([r, theta, phi])
+        self.v_sph         = np.array([vr, vtheta, vphi])
 
         self.velocities.append(self.v_sph)
         self.velocities_cart.append(self.v)
-        velocities_arr = jnp.array(self.velocities)
+
+        # In-place write into preallocated array; row 0 is the initial v_sph,
+        # so the k-th update writes at row k.
+        self.velocities_arr[self.time_step + 1] = self.v_sph
+        valid = self.velocities_arr[:self.time_step + 2]
 
         new_vel_disp = (
-            jnp.std(velocities_arr[:, 0])**2
-            + jnp.std(velocities_arr[:, 1])**2
-            + jnp.std(velocities_arr[:, 2])**2
+            np.std(valid[:, 0])**2
+            + np.std(valid[:, 1])**2
+            + np.std(valid[:, 2])**2
         ) ** 0.5
 
         self.stellar_v_disp.append(new_vel_disp)
 
-        R = float(self.r_pos_sph[0])
-        self.r_values.append(R)
-        self.positions_xyz.append([float(self.r_pos[0]),
-                                    float(self.r_pos[1]),
-                                    float(self.r_pos[2])])
-
-        self.kinetic_energy.append(1/2 * jnp.sum(self.v**2))
-
-        self.ang_mom.append(jnp.linalg.norm(jnp.cross(self.r_pos, self.v)))
+        self.r_values.append(r)
+        self.positions_xyz.append([x, y, z])
+        self.kinetic_energy.append(0.5 * (vx*vx + vy*vy + vz*vz))
+        self.ang_mom.append(np.linalg.norm(np.cross(self.r_pos, self.v)))
 
         self.time_step += 1
 
@@ -497,14 +508,21 @@ class StellarSimTDep:
             (vmap over the radial integrals + one vectorised scipy angular call),
             then written back to each rebound particle.
             """
-            # Collect all current positions into a single JAX array (N, 3)
-            positions_sph = jnp.array([
-                SSF.Cartesian_to_sph(sim_particles[i].x, sim_particles[i].y, sim_particles[i].z)
-                for i in range(self.no_of_particles)
-            ])
+            N = self.no_of_particles
+
+            # Pull rebound Cartesian state in one pass and do the Cartesian->spherical
+            # transform batched in numpy. Avoids N+1 separate jnp.array dispatches.
+            xyz = np.empty((N, 3))
+            for i in range(N):
+                p = sim_particles[i]
+                xyz[i, 0] = p.x
+                xyz[i, 1] = p.y
+                xyz[i, 2] = p.z
+            x, y, z = xyz[:, 0], xyz[:, 1], xyz[:, 2]
+            r, theta, phi = SSF.Cartesian_to_sph_np(x, y, z)
+            positions_sph = jnp.asarray(np.stack([r, theta, phi], axis=1))
 
             self._force_call_count += 1
-            
 
             # Single batched acceleration computation — parallel over all particles
             a_r_all, a_theta_all, a_phi_all = self.construct_acc_master_func(
@@ -513,15 +531,17 @@ class StellarSimTDep:
                 self.autodiff_data['eigenstate_lib']
             )
 
-            # Write accelerations back to rebound particles
-            for i in range(self.no_of_particles):
-                pos_sph = positions_sph[i]
-                ax, ay, az = SSF.acceleration_spherical_to_cartesian(
-                    a_r_all[i], a_theta_all[i], a_phi_all[i], pos_sph[1], pos_sph[2]
-                )
-                sim_particles[i].ax += float(ax)
-                sim_particles[i].ay += float(ay)
-                sim_particles[i].az += float(az)
+            # Pull accs back to host once, then do the spherical->Cartesian
+            # rotation batched in numpy.
+            a_x, a_y, a_z = SSF.acceleration_spherical_to_cartesian_np(
+                np.asarray(a_r_all), np.asarray(a_theta_all), np.asarray(a_phi_all),
+                theta, phi,
+            )
+
+            for i in range(N):
+                sim_particles[i].ax += float(a_x[i])
+                sim_particles[i].ay += float(a_y[i])
+                sim_particles[i].az += float(a_z[i])
 
         sim.additional_forces = additional_forces_step
 
@@ -932,19 +952,13 @@ class StellarSimTDep:
         #                                self.rho_lms_below, self.rho_lms_above)
 
 
-        thetas = np.array(positions_sph[:, 1])   # (N_particles,)
-        phis   = np.array(positions_sph[:, 2])   # (N_particles,)
-
-        Ylm_all, dY_all = sph_harm_y(
-            self.lm_pairs_np[:, 0, None],   # (Nmodes, 1) — broadcast over particles
-            self.lm_pairs_np[:, 1, None],
-            thetas[None, :],                # (1, N_particles)
-            phis[None, :],
-            diff_n=1
+        # JAX-native sph_harm. Returns Y_lm and dY_lm/dtheta in the same
+        # (Nmodes, N_particles) layout / mode order as the scipy path it
+        # replaced. positions_sph is already a JAX array, so no host<->device
+        # roundtrip for thetas/phis.
+        Ylm_all, dY_dtheta = SSF.Ylm_dY_jax(
+            self.L_max_out, positions_sph[:, 1], positions_sph[:, 2],
         )
-
-        Ylm_all   = jnp.array(Ylm_all)
-        dY_dtheta = jnp.array(dY_all[:, :, 0])
 
         m_vals  = self.output_lm_pairs[:, 1, None]  # (Nmodes, 1)
         dY_dphi = 1j * m_vals * Ylm_all             # (Nmodes, N_particles)
@@ -1251,6 +1265,11 @@ class StellarSimTDep:
             particle.potential_energy.append(phi_at_parts[i].real)
 
             #particle.Change_to_new_vel(v_new)
+
+        # Preallocate the per-particle velocity history array now that
+        # no_time_steps is final (after dt_override + ramp adjustments).
+        for particle in self.particles:
+            particle.Create_V_array(self.no_time_steps)
 
         while self.time_step < self.no_time_steps:
 
