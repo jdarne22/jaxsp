@@ -2,7 +2,7 @@ import os
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-
+import pickle
 
 from scipy.integrate import solve_ivp, cumulative_trapezoid
 from scipy.interpolate import interp1d
@@ -24,27 +24,90 @@ def compute_theoretical_trajectory(m22, R0_kpc, total_time_Gyr=10.0,
     """
     u = jsp.set_schroedinger_units(m22)
 
-    cNFWtides_params = jnp.array([
-        357964808.148399 * u.from_Msun,
-        25.690207,
-        0.407461,
-        0.012670 * u.from_Kpc,
-        1.857991 * u.from_Kpc,
-        3.729259,
-    ])
-    density_params = jsp.init_core_NFW_tides_params_from_sample(cNFWtides_params)
+    # ------------------------------------------------------------------
+    # Load (or build + cache) the eigenstate library and wavefunction.
+    # These depend only on m22 and r_max_enclosing_frac, not on R0, so
+    # without this cache every (m22, R0) pair rebuilds the same objects
+    # from scratch. Same disk-cache technique as
+    # Testing_sim_methods/Analytic_t_dep_sim_Ylm_skip_mem_saver.py.
+    # ------------------------------------------------------------------
+    # The eigenstate cache is co-located with the builder script
+    # (Testing_sim_methods/Analytic_t_dep_sim_Ylm_skip_mem_saver.py), not this one.
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "Testing_sim_methods", "precomputed_wf")
+    os.makedirs(cache_dir, exist_ok=True)
 
-    rmin_pot = 0.1 * u.from_pc
-    rmax_pot = jsp.enclosing_radius(0.999, density_params)
-    potential_params = jsp.init_potential_params(density_params, rmin_pot, rmax_pot, 512)
+    cache_suffix = f"m22_{float(m22):.6g}_rbins_{int(1000)}"
+    r_j_r_fname = os.path.join(cache_dir, f"precomputed_R_j_r_{cache_suffix}.npz")
+    pkl_fname   = os.path.join(cache_dir, f"precomputed_objs_{cache_suffix}.pkl")
 
-    rmax_lib = jsp.enclosing_radius(r_max_enclosing_frac, density_params)
-    eigenstate_lib = jsp.init_eigenstate_library(potential_params, rmin_pot, rmax_lib, 1, 10, 1024)
+    cache_params = {
+        'm22': float(m22),
+        'r_min': float(20),
+        'r_max_enclosing_frac': float(r_max_enclosing_frac),
+        'no_radius_bins': int(1000),
+    }
+
+
+    def _cache_valid(data, expected):
+        for k, v in expected.items():
+            if k not in data.files:
+                return False
+            cached = data[k].item() if data[k].shape == () else data[k]
+            if isinstance(v, float):
+                if not np.isclose(cached, v):
+                    return False
+            elif cached != v:
+                return False
+        return True
+
+    eigenstate_lib = None
+    if os.path.isfile(r_j_r_fname) and os.path.isfile(pkl_fname):
+        data = np.load(r_j_r_fname)
+        if _cache_valid(data, cache_params):
+            print(f"Loaded cached wavefunction objects from {pkl_fname}.")
+            with open(pkl_fname, 'rb') as f:
+                objs = pickle.load(f)
+            eigenstate_lib      = objs['eigenstate_lib']
+            wavefunction_params = objs['wavefunction_params']
+            rmax_lib            = float(data['rmax'])  # builder pkl doesn't store rmax_lib
+        else:
+            print(f"Cached {r_j_r_fname} stale (parameter mismatch); recomputing.")
+
 
     rmin_wf = 20 * u.from_pc
-    wavefunction_params = jsp.init_wavefunction_params(
-        eigenstate_lib, density_params, rmin_wf, rmax_lib, 1e-7
-    )
+
+
+    if eigenstate_lib is None:
+        cNFWtides_params = jnp.array([
+            357964808.148399 * u.from_Msun,
+            25.690207,
+            0.407461,
+            0.012670 * u.from_Kpc,
+            1.857991 * u.from_Kpc,
+            3.729259,
+        ])
+        density_params = jsp.init_core_NFW_tides_params_from_sample(cNFWtides_params)
+
+        rmin_pot = 0.1 * u.from_pc
+        rmax_pot = jsp.enclosing_radius(0.999, density_params)
+        potential_params = jsp.init_potential_params(density_params, rmin_pot, rmax_pot, 512)
+
+        rmax_lib = jsp.enclosing_radius(r_max_enclosing_frac, density_params)
+        eigenstate_lib = jsp.init_eigenstate_library(potential_params, rmin_pot, rmax_lib, 1, 10, 1024)
+
+        wavefunction_params = jsp.init_wavefunction_params(
+            eigenstate_lib, density_params, rmin_wf, rmax_lib, 1e-7
+        )
+
+        with open(pkl_fname, 'wb') as f:
+            pickle.dump({
+                'eigenstate_lib': eigenstate_lib,
+                'wavefunction_params': wavefunction_params,
+                'rmax_lib': float(rmax_lib),
+                'cache_params': cache_params,
+            }, f)
+        print(f"Cached wavefunction objects to {pkl_fname}.")
 
     r_grid = np.logspace(np.log10(rmin_wf), np.log10(rmax_lib), 1000)
 
@@ -143,8 +206,8 @@ def compute_theoretical_trajectory(m22, R0_kpc, total_time_Gyr=10.0,
     return t_arr, R_arr, info
 
 
-m22_list = [1, 2, 3, 10]
-R0_list_kpc = [0.19, 1.0, 2.0]
+m22_list = [1, 2, 5, 10]
+R0_list_kpc = [0.19, 0.3, 0.5, 0.7, 1.0]
 
 results = {}
 for m22 in m22_list:

@@ -2,9 +2,9 @@ import os
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-import Analytic_t_dep_sim as ATD
+import PhD_year_1.jaxsp.Adding_stellar_masses.Analytic_t_dep_sim as ATD
 
-import analytic_test_gaunt as ATG
+import Analytic_test as AT
 
 import time
 
@@ -20,7 +20,7 @@ import matplotlib.colors as mcolors
 
 import importlib
 importlib.reload(ATD)
-importlib.reload(ATG)
+importlib.reload(AT)
 
 #--------------------------------------------------------------------------------------------------------------
 
@@ -43,7 +43,7 @@ for N in N_t:
     plot = False
     integrator = 'leapfrog'
 
-    static_test_leapfrog = ATG.StellarSimTDep(m22 = 1, r_half = 0.19, no_of_particles = 20, no_time_steps = N, total_evolve_time = 10, r_min = 20, 
+    static_test_leapfrog = AT.StellarSimTDep(m22 = 1, r_half = 0.19, no_of_particles = 20, no_time_steps = N, total_evolve_time = 10, r_min = 20, 
                                 r_max_enclosing_frac = 0.99, no_radius_bins = 1000, static = static, frozen = frozen, SphHT = SphHT, integrator = integrator,
                                 plot = plot, animate=animate, animate_every=10)
     

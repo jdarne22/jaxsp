@@ -35,7 +35,7 @@ from collections import defaultdict
 
 import gc
 
-import gaunt_funcs_CC_speed as gf
+import PhD_year_1.jaxsp.Adding_stellar_masses.gaunt_funcs as gf
 
 importlib.reload(SSF)
 importlib.reload(gf)

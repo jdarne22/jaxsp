@@ -31,7 +31,7 @@ from scipy.special import sph_harm_y
 
 from collections import defaultdict
 
-import gaunt_funcs_CC_speed as gf
+import PhD_year_1.jaxsp.Adding_stellar_masses.gaunt_funcs as gf
 
 importlib.reload(SSF)
 importlib.reload(gf)
@@ -283,7 +283,7 @@ class StellarSimTDep:
     (in main function construct_acc_batch)
     '''
 
-    def __init__(self, m22, r_half, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, SphHT, integrator, plot,
+    def __init__(self, m22, r_half, r_half_width, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac, no_radius_bins, SphHT, integrator, plot,
                  frozen, static, dt_override, time_dep):
 
         self.stellar_v_disp = []
@@ -296,6 +296,7 @@ class StellarSimTDep:
         self.static = static
         self.dt_override = dt_override
         self.time_dep = time_dep
+        self.r_half_width = r_half_width
 
 
         self.m22 = m22
@@ -546,7 +547,7 @@ class StellarSimTDep:
         self.particles = []
         for i in range(self.no_of_particles):
 
-            r_orbit = jax.random.uniform(jax.random.PRNGKey(i), shape=(), minval=0.1 * self.u.from_Kpc, maxval=0.3 * self.u.from_Kpc)
+            r_orbit = jax.random.uniform(jax.random.PRNGKey(i), shape=(), minval= (self.r_half - 0.5 * self.r_half_width) * self.u.from_Kpc, maxval= (self.r_half + 0.5 * self.r_half_width) * self.u.from_Kpc)
 
             X1 = jax.random.normal(jax.random.PRNGKey(i+1000), shape=(), dtype=jnp.float64)
             X2 = jax.random.normal(jax.random.PRNGKey(i+2000), shape=(), dtype=jnp.float64)
