@@ -23,7 +23,7 @@ from jax.experimental.shard_map import shard_map
 from jax.sharding import NamedSharding, PartitionSpec as P
 from jaxsp.constants import GN
 
-import PhD_year_1.jaxsp.Adding_stellar_masses.gaunt_funcs as gf
+import gaunt_funcs as gf
 import Stellar_sim_funcs as SSF
 
 import importlib

@@ -192,7 +192,7 @@ def compute_theoretical_trajectory(m22, R0_kpc, total_time_Gyr=10.0,
     R_arr = sol.sol(t_arr)[0] 
 
     sigma0 = np.sqrt(G_c * float(M_ULDM_interp(R0)) / R0)
-    lam_dB0 = hbar_c / (m_a_c * sigma0)
+    lam_dB0 = hbar_c * 2*np.pi / (m_a_c * sigma0)
     info = {
         'sigma_kms': sigma0 * u.to_kms,
         'lambda_dB_kpc': lam_dB0 * u.to_Kpc,
@@ -207,7 +207,7 @@ def compute_theoretical_trajectory(m22, R0_kpc, total_time_Gyr=10.0,
 
 
 m22_list = [1, 2, 5, 10]
-R0_list_kpc = [0.19, 0.3, 0.5, 0.7, 1.0]
+R0_list_kpc = [0.19, 0.5, 1.0]
 
 results = {}
 for m22 in m22_list:
@@ -224,16 +224,17 @@ for m22 in m22_list:
 
 import matplotlib.pyplot as plt
 
-fig, axes = plt.subplots(len(m22_list), len(R0_list_kpc),
-                          figsize=(4 * len(R0_list_kpc), 2.8 * len(m22_list)),
+fig, axes = plt.subplots(len(R0_list_kpc), len(m22_list),
+                          figsize=(4 * len(m22_list), 3 * len(R0_list_kpc)),
                           sharex=True)
-for i, m22 in enumerate(m22_list):
-    for j, R0 in enumerate(R0_list_kpc):
+for j, m22 in enumerate(m22_list):
+    for i, R0 in enumerate(R0_list_kpc):
         ax = axes[i, j]
         t_arr, R_arr, info = results[(m22, R0)]
         u = info['u']
         ax.plot(t_arr * u.to_Gyr, R_arr * u.to_Kpc, lw=2)
-        ax.axhline(R0, color='red', linestyle='--', alpha=0.5, label=f'R0={R0} kpc')
+        #ax.axhline(R0, color='red', linestyle='--', alpha=0.5, label=f'R0={R0} kpc')
+        #ax.axhline(info['r_c_kpc'], color='orange', linestyle='--', alpha=0.5, label=f"r_c={info['r_c_kpc']:.2f} kpc")
         # highlight if in granular regime AND visibly heating
         granular = info['R_over_r_c'] >= 5
         visible = abs(info['delta_R_over_R']) >= 0.2
@@ -242,15 +243,16 @@ for i, m22 in enumerate(m22_list):
                 spine.set_edgecolor('green'); spine.set_linewidth(2.5)
         ax.set_title(
             f"m22={m22}, R0={R0} kpc\n"
-            f"R/r_c={info['R_over_r_c']:.1f}, dR/R={info['delta_R_over_R']*100:+.1f}%",
-            fontsize=9,
+            f"R0/r_c={info['R_over_r_c']:.1f}, dR/R0={info['delta_R_over_R']*100:+.1f}%",
+            fontsize=15,
         )
-        if i == len(m22_list) - 1:
-            ax.set_xlabel('t [Gyr]')
+        ax.tick_params(axis='both', which='major', labelsize=14)
+        if i == len(R0_list_kpc) - 1:
+            ax.set_xlabel('t [Gyr]', fontsize=15)
         if j == 0:
-            ax.set_ylabel('R [kpc]')
+            ax.set_ylabel('R [kpc]', fontsize=15)
 
-plt.suptitle('Eq 21-only heating prediction (green = granular AND visible)', y=1.00)
+
 plt.tight_layout()
 plt.savefig('/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses/Tests/Testing_sim_methods/Plots/th_heating_w_soliton_plot.png', dpi=300)
 
