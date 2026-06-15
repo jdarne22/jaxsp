@@ -335,6 +335,17 @@ class StellarSimTDep:
         else:
             self.L_max_out = L_max_out_full
 
+        # L-sharding requires L_max_out divisible by the number of devices.
+        # Round down to the nearest multiple (minimum L) so shard_l_arr
+        # doesn't silently fall back to replicated, which causes OOM.
+        if self.sharding.shard_l is not None:
+            n_dev = len(self.sharding.devices)
+            if self.L_max_out % n_dev != 0:
+                L_aligned = max((self.L_max_out // n_dev) * n_dev, L)
+                print(f"L_max_out {self.L_max_out} not divisible by {n_dev} devices; "
+                      f"rounding down to {L_aligned} for L-sharding.")
+                self.L_max_out = L_aligned
+
         self.rmin = rmin
         self.rmax = rmax
         
@@ -1096,6 +1107,89 @@ class StellarSimTDep:
         )
 
 
+    def _save_checkpoint(self, checkpoint_dir, final=False):
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        fname = 'checkpoint_final.pkl' if final else f'checkpoint_step_{self.time_step}.pkl'
+        path = os.path.join(checkpoint_dir, fname)
+
+        particle_states = []
+        for p in self.particles:
+            particle_states.append({
+                'r_pos': p.r_pos.copy(),
+                'v': p.v.copy(),
+                'r_pos_sph': p.r_pos_sph.copy(),
+                'v_sph': p.v_sph.copy(),
+                'r_values': list(p.r_values),
+                'positions_xyz': list(p.positions_xyz),
+                'velocities': list(p.velocities),
+                'velocities_cart': list(p.velocities_cart),
+                'velocities_arr': p.velocities_arr.copy(),
+                'kinetic_energy': list(p.kinetic_energy),
+                'potential_energy': list(p.potential_energy),
+                'ang_mom': list(p.ang_mom),
+                'stellar_v_disp': list(p.stellar_v_disp),
+                'average_r': list(p.average_r),
+                'time_step': p.time_step,
+            })
+
+        state = {
+            'sim_time_step': self.time_step,
+            'no_time_steps': self.no_time_steps,
+            'n_ramp_steps': self.n_ramp_steps,
+            'sim_t': float(self.sim.t),
+            'particle_states': particle_states,
+        }
+
+        with open(path, 'wb') as f:
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        label = "Final checkpoint" if final else f"Checkpoint at step {self.time_step}"
+        print(f"{label} saved: {path}", flush=True)
+
+    def _load_checkpoint(self, checkpoint_dir):
+        """Find the latest checkpoint in checkpoint_dir and restore state. Returns True if found."""
+        if not os.path.isdir(checkpoint_dir):
+            return False
+
+        checkpoints = sorted(
+            [f for f in os.listdir(checkpoint_dir)
+             if f.startswith('checkpoint_step_') and f.endswith('.pkl')],
+            key=lambda f: int(f[len('checkpoint_step_'):-len('.pkl')])
+        )
+
+        if not checkpoints:
+            return False
+
+        path = os.path.join(checkpoint_dir, checkpoints[-1])
+        print(f"Resuming from checkpoint: {path}", flush=True)
+
+        with open(path, 'rb') as f:
+            state = pickle.load(f)
+
+        self.time_step = state['sim_time_step']
+        self.no_time_steps = state['no_time_steps']
+        self.n_ramp_steps = state['n_ramp_steps']
+        self.sim.t = state['sim_t']
+
+        for particle, ps in zip(self.particles, state['particle_states']):
+            particle.r_pos = ps['r_pos']
+            particle.v = ps['v']
+            particle.r_pos_sph = ps['r_pos_sph']
+            particle.v_sph = ps['v_sph']
+            particle.r_values = ps['r_values']
+            particle.positions_xyz = ps['positions_xyz']
+            particle.velocities = ps['velocities']
+            particle.velocities_cart = ps['velocities_cart']
+            particle.velocities_arr = ps['velocities_arr']
+            particle.kinetic_energy = ps['kinetic_energy']
+            particle.potential_energy = ps['potential_energy']
+            particle.ang_mom = ps['ang_mom']
+            particle.stellar_v_disp = ps['stellar_v_disp']
+            particle.average_r = ps['average_r']
+            particle.time_step = ps['time_step']
+
+        return True
+
     def time_step_particle(self):
 
         """
@@ -1124,7 +1218,10 @@ class StellarSimTDep:
             #print(f"  Particle {i}: r = {float(particle.r_pos_sph[0]) * self.u.to_Kpc:.4f} kpc")
 
 
-    def run_simulation(self):
+    def run_simulation(self, checkpoint_every=50, checkpoint_dir=None):
+
+        if checkpoint_dir is None:
+            checkpoint_dir = f'checkpoints_m22_{self.m22}'
 
         start = time()
         aj = self.initialising_simulation()
@@ -1376,6 +1473,11 @@ class StellarSimTDep:
         
         self.maximum_rho_00 = [jnp.max(jnp.abs(self.rho_lms[:, 0, self.L_max_out - 1]))]
 
+        if self._load_checkpoint(checkpoint_dir):
+            print(f"Resumed from step {self.time_step} / {self.no_time_steps}", flush=True)
+        else:
+            print("No checkpoint found, starting from step 0.", flush=True)
+
         while self.time_step < self.no_time_steps:
 
             print(f"Time step {self.time_step + 1} / {self.no_time_steps}")
@@ -1426,6 +1528,11 @@ class StellarSimTDep:
 
 
             self.time_step += 1
+
+            if self.time_step % checkpoint_every == 0:
+                self._save_checkpoint(checkpoint_dir)
+
+        self._save_checkpoint(checkpoint_dir, final=True)
 
 
     def run_simulation_profiled(self, time_output='profile_time.prof',

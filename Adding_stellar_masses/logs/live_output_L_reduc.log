@@ -1,0 +1,2506 @@
+E0615 08:19:53.843382 2744875 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0615 08:19:53.869898 2744874 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0615 08:19:53.870002 2744873 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+[CudaDevice(id=0), CudaDevice(id=1)]
+Running sim with L_out_frac = 1...
+[mem_saver] Multi-GPU sharding enabled across 2 devices.
+Loading precomputed R_j_r from /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/precomputed_wf/precomputed_R_j_r_m22_10_rbins_1000.npz...
+l max from jaxsp: 240
+L_max_out 481 not divisible by 2 devices; rounding down to 480 for L-sharding.
+Particle 0: v_circ = 11.233 km/s
+Particle 1: v_circ = 10.941 km/s
+Particle 2: v_circ = 11.239 km/s
+Particle 3: v_circ = 11.650 km/s
+Particle 4: v_circ = 10.985 km/s
+Mean r: 0.185 kpc
+Min T_orb: 95.966 Myr
+T_c: 14.901 Myr
+dt: 0.015 Gyr
+Number of time steps: 671
+Ramp phase: 0 steps (0.000 Gyr)
+Main phase: 671 steps (9.999 Gyr)
+Total: 671 steps
+completed rho_lms precomputation
+No checkpoint found, starting from step 0.
+Time step 1 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.48 seconds
+Time step 2 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.23 seconds
+Time step 3 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 4 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 5 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 6 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 7 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 8 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 9 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 10 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 11 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 12 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 13 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 14 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 15 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 16 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 17 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 18 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 19 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 20 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 21 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.23 seconds
+Time step 22 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 23 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 24 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 25 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 26 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 27 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 28 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 29 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 30 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 31 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 32 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 33 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 34 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 35 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 36 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 37 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 38 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 39 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 40 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 41 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 42 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 43 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 44 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 45 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 46 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 47 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 48 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 49 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 50 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Checkpoint at step 50 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_50.pkl
+Time step 51 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 52 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 53 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 54 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 55 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 56 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.96 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 57 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 58 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 59 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 60 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 61 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 62 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 63 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 64 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 65 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 66 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 67 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 68 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 69 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 70 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 71 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 72 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 73 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 74 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 75 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 76 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 77 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 78 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 79 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 80 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 81 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 82 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 83 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 84 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 85 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 86 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 87 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 88 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 89 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 90 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.96 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 91 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 92 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 93 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 94 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 95 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 96 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 97 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 98 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 99 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 100 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Checkpoint at step 100 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_100.pkl
+Time step 101 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 102 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 103 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 104 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 105 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 106 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 107 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 108 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 109 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 110 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 111 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 112 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 113 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 114 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 115 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 116 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 117 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 118 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.96 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 119 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 120 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 121 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 122 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.18 seconds
+Time step 123 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 124 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 125 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 126 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 127 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 128 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 129 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 130 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 131 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 132 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 133 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 134 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 135 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 136 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 137 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 138 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 139 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 140 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 141 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 142 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 143 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.24 seconds
+Time step 144 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 145 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 146 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 147 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 148 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 149 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 150 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Checkpoint at step 150 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_150.pkl
+Time step 151 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 152 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 153 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 154 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 155 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 156 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.23 seconds
+Time step 157 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 158 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 159 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 160 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 161 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 162 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 163 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 164 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 165 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 166 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 167 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 168 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 169 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 170 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 171 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 172 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 173 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 174 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 175 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 176 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 177 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 178 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 179 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 180 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 181 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 182 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.23 seconds
+Time step 183 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 184 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 185 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 186 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 187 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 188 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 189 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 190 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 191 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 192 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 193 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 194 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 195 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 196 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 197 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 198 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 199 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 200 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Checkpoint at step 200 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_200.pkl
+Time step 201 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 202 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 203 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 204 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 205 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 206 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.24 seconds
+Time step 207 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 208 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 209 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 210 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 211 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 212 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 213 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 214 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 215 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 216 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 217 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 218 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 219 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 220 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 221 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 222 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 223 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 224 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 225 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 226 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 227 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 228 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 229 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 230 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 231 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 232 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 233 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 234 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 235 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 236 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 237 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 238 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 239 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 240 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 241 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 242 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 243 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 244 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 245 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 246 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 247 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 248 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.24 seconds
+Time step 249 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 250 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Checkpoint at step 250 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_250.pkl
+Time step 251 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 252 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 253 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 254 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 255 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 256 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 257 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 258 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 259 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 260 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 261 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 262 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 263 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 264 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 265 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 266 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 267 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 268 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 269 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 270 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 271 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 272 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 273 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 274 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 275 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 276 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 277 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 278 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 279 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 280 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 281 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 282 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 283 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 284 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 285 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 286 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 287 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 288 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 289 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 290 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 291 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 292 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 293 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.22 seconds
+Time step 294 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 295 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 296 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 297 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 298 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 299 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 300 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Checkpoint at step 300 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_300.pkl
+Time step 301 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 302 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 303 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 304 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 305 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 306 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 307 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 308 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 309 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 310 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 311 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 312 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 313 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 314 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 315 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 316 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 317 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 318 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 319 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 320 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 321 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 322 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 323 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 324 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 325 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 326 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 327 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 328 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 329 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 330 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 331 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 332 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 333 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 334 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 335 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 336 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 337 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 338 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 339 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 340 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 341 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 342 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 343 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 344 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 345 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 346 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 347 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 348 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 349 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 350 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Checkpoint at step 350 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_350.pkl
+Time step 351 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 352 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 353 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 354 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 355 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 356 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 357 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 358 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 359 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 360 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 361 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 362 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 363 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 364 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 365 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 366 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 367 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 368 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 369 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 370 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 371 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 372 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 373 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 374 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 375 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 376 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 377 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 378 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 379 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 380 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 381 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 382 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 383 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 384 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 385 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 386 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 387 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 388 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 389 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 390 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 391 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 392 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 393 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 394 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 395 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 396 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 397 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 398 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 399 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 400 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Checkpoint at step 400 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_400.pkl
+Time step 401 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 402 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 403 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 404 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 405 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 406 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 407 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 408 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 409 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 410 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 411 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 412 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 413 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 414 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 415 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 416 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 417 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 418 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 419 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 420 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 421 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 422 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 423 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 424 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 425 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 426 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 427 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 428 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 429 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 430 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 431 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 432 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 433 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 434 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 435 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 436 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 437 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 438 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 439 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 440 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 441 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 442 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 443 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 444 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 445 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.96 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 446 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 447 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 448 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 449 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 450 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Checkpoint at step 450 saved: Checkpoints/checkpoints_m22_10_r0_0.19_Lout_1/checkpoint_step_450.pkl
+Time step 451 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 452 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 453 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 454 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 455 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 456 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 457 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 458 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 459 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 460 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 461 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 462 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 463 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 464 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 465 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 466 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 467 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 468 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 469 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 470 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 471 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 472 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 473 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 474 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 475 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 476 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 477 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 478 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 479 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 480 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 481 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 482 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.20 seconds
+Time step 483 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 484 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 485 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 486 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.93 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.21 seconds
+Time step 487 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 488 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.95 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 489 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 490 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 491 / 671
+Building rho_lms for this timestep...
+rho_lms built in 14.94 seconds
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.19 seconds
+Time step 492 / 671
+Building rho_lms for this timestep...

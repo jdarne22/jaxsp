@@ -23,7 +23,7 @@ import matplotlib
 
 from scipy.interpolate import interp1d
 
-from scipy.special import sph_harm
+from scipy.special import sph_harm_y
 
 import s2fft
 
@@ -690,7 +690,7 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
 
     Y_list = []
     for ell, m in zip(lm_l, lm_m):
-        Y_lm_mode = sph_harm(m, ell, Phi, Theta)  # (n_theta, n_phi), complex
+        Y_lm_mode = sph_harm_y(ell, m, Theta, Phi)  # (n_theta, n_phi), complex
         Y_list.append(Y_lm_mode)
 
     Y_lm = jnp.stack(Y_list, axis=0)  # (Nmodes, n_theta, n_phi), complex
