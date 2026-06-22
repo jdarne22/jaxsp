@@ -61,19 +61,19 @@ sparse_k_batch=16384
 r_chunk_size = 32
 compute_dtype = jnp.complex64
 
-L_out_frac = 1
+L_out_frac = 0.5
 
-m22 = 20
-R0 = [0.19]
+m22 = 30
+R0 = [1]
 
 for R0 in R0:
 
-    sim = ATDS_MS.StellarSimTDep(m22 = m22, r_half = R0, r_half_width = 0.05, no_of_particles = 5, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
+    sim = ATDS_MS.StellarSimTDep(m22 = m22, r_half = R0, r_half_width = 0.05, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
                                 r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, 
                                 plot = plot, dt_override=dt_override, ramp_time=ramp_time, l_band_size=l_band_size, use_multi_gpu = use_multi_gpu,
                                     sparse_k_batch=sparse_k_batch, r_chunk_size=r_chunk_size, compute_dtype=compute_dtype, L_out_frac=L_out_frac)
 
-    sim.run_simulation()
+    sim.run_simulation(checkpoint_dir=f'/rds/general/user/jd925/ephemeral/Checkpoints/checkpoints_m22_{m22}_r0_{R0}_Lout_{L_out_frac}')
 
 
     positions_all = np.array([p.positions_xyz for p in sim.particles])  # (N_particles, N_steps+1, 3)

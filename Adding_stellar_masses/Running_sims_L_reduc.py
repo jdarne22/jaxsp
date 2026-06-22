@@ -69,20 +69,20 @@ L_sims = []
 
 m22 = 10
 
-R_0 = 0.19
+R_0 = 1
 
 
-for L_out_frac in [1, 0.9, 0.8, 0.7, 0.6, 0.5]:
+for L_out_frac in [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]:
 
   print(f"Running sim with L_out_frac = {L_out_frac}...")
 
-  sim = ATDS_MS.StellarSimTDep(m22 = 10, r_half = R_0, r_half_width = 0.05, no_of_particles = 5, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
+  sim = ATDS_MS.StellarSimTDep(m22 = 10, r_half = R_0, r_half_width = 0.05, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
                                 r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, 
                                 plot = plot, dt_override=dt_override, ramp_time=ramp_time, l_band_size=l_band_size, use_multi_gpu = use_multi_gpu,
                                   sparse_k_batch=sparse_k_batch, r_chunk_size=r_chunk_size, compute_dtype=compute_dtype, L_out_frac=L_out_frac)
 
 
-  sim.run_simulation(checkpoint_dir=f'Checkpoints/checkpoints_m22_{m22}_r0_{R_0}_Lout_{L_out_frac}')
+  sim.run_simulation(checkpoint_dir=f'/rds/general/user/jd925/ephemeral/Checkpoints/checkpoints_m22_{m22}_r0_{R_0}_Lout_{L_out_frac}')
 
   
   L_sims.append(sim)
@@ -152,7 +152,7 @@ for i, sim in enumerate(L_sims):
     
 plt.axhline(L_sims[0].r_half, color='r', linestyle='--', label='Initial Particle Position (r_half)')
     
-plt.savefig(f'/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Plots/Reducing_L/L_reduc_m_22_{m22}.png', dpi=300, bbox_inches='tight')
+plt.savefig(f'/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Plots/Reducing_L/L_reduc_m_22_{m22}_r0_{R_0}_small.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 
@@ -172,5 +172,5 @@ plt.ylabel('Relative Error in Half-Mass Radius')
 plt.title('Relative Error in Half-Mass Radius over Time')
 plt.yscale('log')
 plt.legend()
-plt.savefig(f'/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Plots/Reducing_L/L_reduc_error_m_22_{m22}.png', dpi=300, bbox_inches='tight')
+plt.savefig(f'/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Plots/Reducing_L/L_reduc_error_m_22_{m22}_r0_{R_0}_small.png', dpi=300, bbox_inches='tight')
 plt.close()

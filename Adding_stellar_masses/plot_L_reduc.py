@@ -122,14 +122,14 @@ ax.set_xlabel("Time [Gyr]")
 ax.set_ylabel("Average Stellar Radius [kpc]")
 ax.set_title(f"Average Stellar Radius vs Time  (m22={m22_val}, r0={r0_kpc} kpc)")
 ax.legend(loc="upper left")
-out1 = os.path.join(PLOT_DIR, f"L_reduc_m22_{m22_str}_r0_{r0_str}.png")
+out1 = os.path.join(PLOT_DIR, f"L_reduc_all_m22_{m22_str}_r0_{r0_str}.png")
 fig.savefig(out1, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"\nSaved: {out1}")
 
 
 # --- Plot 2: Relative error vs time (truth = largest L_out_frac) ---
-R_truth = R_halves[0]
+R_truth = R_halves[5]
 
 fig, ax = plt.subplots(figsize=(10, 6))
 for i, L_frac in enumerate(L_out_fracs):
@@ -143,7 +143,7 @@ ax.set_ylabel("Relative Error in Half-Mass Radius")
 ax.set_title(f"Relative Error in Half-Mass Radius  (m22={m22_val}, r0={r0_kpc} kpc)")
 ax.set_yscale("log")
 ax.legend()
-out2 = os.path.join(PLOT_DIR, f"L_reduc_error_m22_{m22_str}_r0_{r0_str}.png")
+out2 = os.path.join(PLOT_DIR, f"L_reduc_all_error_m22_{m22_str}_r0_{r0_str}.png")
 fig.savefig(out2, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"Saved: {out2}")

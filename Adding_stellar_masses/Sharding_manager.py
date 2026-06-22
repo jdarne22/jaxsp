@@ -51,6 +51,8 @@ class ShardingManager:
             self.mesh = Mesh(device_mesh, axis_names=('x',))
             # Shard `Nj` axis (last) for arrays like (Nr, Nj) and (N_unique, Nj).
             self.shard_nj  = NamedSharding(self.mesh, PartitionSpec(None, 'x'))
+            # Shard `J` axis for 1-D arrays of shape (J,) e.g. optimizer params.
+            self.shard_j   = NamedSharding(self.mesh, PartitionSpec('x'))
             # Shard `L`  axis (middle) for arrays of shape (Nr, L, 2L-1).
             self.shard_l   = NamedSharding(self.mesh, PartitionSpec(None, 'x', None))
             self.shard_rep = NamedSharding(self.mesh, PartitionSpec())
@@ -58,14 +60,27 @@ class ShardingManager:
         else:
             self.mesh = None
             self.shard_nj = None
+            self.shard_j = None
             self.shard_l = None
             self.shard_rep = None
 
     def shard_nj_arr(self, arr):
         """Place a 2-D array (..., Nj) sharded along Nj. No-op if single-GPU."""
-        if self.shard_nj is not None:
-            return jax.device_put(arr, self.shard_nj)
-        return arr
+        if self.shard_nj is None:
+            return arr
+        n_dev = len(self.devices)
+        if arr.shape[-1] % n_dev != 0:
+            return arr
+        return jax.device_put(arr, self.shard_nj)
+
+    def shard_j_arr(self, arr):
+        """Place a 1-D array (J,) sharded along J. No-op if single-GPU or J not divisible."""
+        if self.shard_j is None:
+            return arr
+        n_dev = len(self.devices)
+        if arr.shape[0] % n_dev != 0:
+            return arr
+        return jax.device_put(arr, self.shard_j)
 
     def shard_l_arr(self, arr):
         """Place a 3-D array (Nr, L, 2L-1) sharded along L. No-op if single-GPU,
