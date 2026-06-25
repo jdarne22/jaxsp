@@ -65,21 +65,34 @@ class ShardingManager:
             self.shard_rep = None
 
     def shard_nj_arr(self, arr):
-        """Place a 2-D array (..., Nj) sharded along Nj. No-op if single-GPU."""
+        """Place a 2-D array (..., Nj) sharded along Nj. No-op if single-GPU.
+        Pads the last axis to the nearest multiple of n_dev if needed so sharding
+        is never silently skipped. Callers that pre-pad (e.g. the simulation) will
+        see pad=0 here and are unaffected.
+        """
         if self.shard_nj is None:
             return arr
         n_dev = len(self.devices)
-        if arr.shape[-1] % n_dev != 0:
-            return arr
+        pad = (-arr.shape[-1]) % n_dev
+        if pad:
+            print(f"[ShardingManager] shard_nj_arr: padding last axis by {pad} "
+                  f"({arr.shape[-1]} → {arr.shape[-1] + pad}) for {n_dev}-way sharding.")
+            arr = jnp.pad(arr, [(0, 0)] * (arr.ndim - 1) + [(0, pad)])
         return jax.device_put(arr, self.shard_nj)
 
     def shard_j_arr(self, arr):
-        """Place a 1-D array (J,) sharded along J. No-op if single-GPU or J not divisible."""
+        """Place a 1-D array (J,) sharded along J. No-op if single-GPU.
+        Pads to the nearest multiple of n_dev if needed so sharding is never
+        silently skipped.
+        """
         if self.shard_j is None:
             return arr
         n_dev = len(self.devices)
-        if arr.shape[0] % n_dev != 0:
-            return arr
+        pad = (-arr.shape[0]) % n_dev
+        if pad:
+            print(f"[ShardingManager] shard_j_arr: padding axis-0 by {pad} "
+                  f"({arr.shape[0]} → {arr.shape[0] + pad}) for {n_dev}-way sharding.")
+            arr = jnp.pad(arr, [(0, pad)])
         return jax.device_put(arr, self.shard_j)
 
     def shard_l_arr(self, arr):

@@ -1,9 +1,9 @@
 #!/bin/bash
-#PBS -N Running_sims
-#PBS -l select=1:ncpus=1:mem=16gb:ngpus=4:gpu_type=L40S
+#PBS -N Running_tests
+#PBS -l select=1:ncpus=1:mem=16gb:ngpus=2:gpu_type=L40S
 #PBS -l walltime=24:00:00
-#PBS -o /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/logs/job_output.log
-#PBS -e /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/logs/job_error.log
+#PBS -o /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/logs/job_test_output.log
+#PBS -e /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/logs/job_test_error.log
 
 WORKDIR=/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses
 
@@ -22,4 +22,4 @@ export JAX_COMPILATION_CACHE_DIR=/rds/general/user/jd925/ephemeral/jax_cache
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 
 
-python -u $WORKDIR/Running_sims.py 2>&1 | tee $WORKDIR/logs/live_output.log
+python -u $WORKDIR/Running_tests.py 2>&1 | tee $WORKDIR/logs/live_test_output.log

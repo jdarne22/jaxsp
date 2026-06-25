@@ -2,7 +2,7 @@ import os
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 #os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 #os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"   # or: "cuda_async"
 
 #os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
@@ -133,6 +133,7 @@ for m22 in m22_list:
             cpu = jax.devices('cpu')[0]
             with jax.default_device(cpu):
                 eigenstate_lib = jsp.init_eigenstate_library(potential_params, rmin, rmax, a, b, N)
+            print(f"  eigenstate_lib.J={eigenstate_lib.J}, J % {len(jax.devices())} devices = {eigenstate_lib.J % len(jax.devices())}")
 
             rmin = r_min * u.from_pc
 

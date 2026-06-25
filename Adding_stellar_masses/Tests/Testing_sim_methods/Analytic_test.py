@@ -347,12 +347,23 @@ class StellarSimTDep:
         # silently drop eigenmode contributions, not just truncate rho.
         L_max_out_full = 2 * L - 1
         if self.SphHT and self.L_out_frac < 1.0:
-            L_sht = max(int(round(self.L_out_frac * L_max_out_full)), L)
+            L_sht = int(round(self.L_out_frac * L_max_out_full))
             self.L_max_out = L_sht
             print(f"SphHT bandwidth truncated by L_out_frac={self.L_out_frac}: "
                   f"L_max_out = {self.L_max_out} (natural 2L-1 = {L_max_out_full}, floor L = {L})")
         else:
             self.L_max_out = L_max_out_full
+
+        # L-sharding requires L_max_out divisible by the number of devices.
+        # Round down to the nearest multiple (minimum L) so shard_l_arr
+        # doesn't silently fall back to replicated, which causes OOM.
+        if self.sharding.shard_l is not None:
+            n_dev = len(self.sharding.devices)
+            if self.L_max_out % n_dev != 0:
+                L_aligned = max((self.L_max_out // n_dev) * n_dev, L)
+                print(f"L_max_out {self.L_max_out} not divisible by {n_dev} devices; "
+                      f"rounding down to {L_aligned} for L-sharding.")
+                self.L_max_out = L_aligned
 
         self.rmin = rmin
         self.rmax = rmax
@@ -397,6 +408,38 @@ class StellarSimTDep:
         # `R_j_r_fixed` and a per-step `phase` (or pre-phased aj) directly.
 
         (parent_j, lm_pairs, lm_l_per_mode, lm_m_per_mode, theta, phi, lm_idx_per_mode) = MSS.precompute_lm_pairs(l)
+
+        # When L_max_out < L (L_out_frac below ~0.5), modes with l >= L_max_out
+        # would scatter to JAX-clamped indices in the (L_max_out, 2*L_max_out-1)
+        # psi_lm buffer, silently corrupting the highest-l row. Drop them here
+        # so the wavefunction genuinely has bandwidth L_max_out.
+        if self.SphHT and self.L_max_out < L:
+            lm_l_np = np.array(lm_l_per_mode)
+            k_mask = lm_l_np < self.L_max_out          # bool over k-modes
+
+            parent_j       = parent_j[k_mask]
+            lm_l_per_mode  = lm_l_per_mode[k_mask]
+            lm_m_per_mode  = lm_m_per_mode[k_mask]
+            lm_idx_old     = np.array(lm_idx_per_mode)[k_mask]
+
+            # Filter unique (l,m) pairs and rebuild the index mapping.
+            lm_pairs_np = np.array(lm_pairs)
+            pair_mask   = lm_pairs_np[:, 0] < self.L_max_out
+            lm_pairs    = lm_pairs[pair_mask]
+            remap       = np.full(len(pair_mask), -1, dtype=np.int32)
+            remap[np.where(pair_mask)[0]] = np.arange(int(pair_mask.sum()), dtype=np.int32)
+            lm_idx_per_mode = jnp.array(remap[lm_idx_old], dtype=jnp.int32)
+
+            # Recompute the MW grid for the truncated bandwidth.
+            n_theta = self.L_max_out
+            n_phi   = 2 * self.L_max_out - 1
+            theta   = jnp.asarray((np.pi * (2 * np.arange(n_theta) + 1)) / n_phi)
+            phi     = jnp.asarray((2 * np.pi * np.arange(n_phi)) / n_phi)
+
+            print(f"Mode mask (L_max_out={self.L_max_out} < L={L}): "
+                  f"dropped {int((~k_mask).sum())} k-modes and "
+                  f"{int((~pair_mask).sum())} unique (l,m) pairs with l >= {self.L_max_out}. "
+                  f"Remaining: {len(parent_j)} k-modes, {lm_pairs.shape[0]} unique pairs.")
 
         Nmodes = len(parent_j)
         rand_phase_per_mode = jax.random.uniform(jax.random.PRNGKey(42), shape=(Nmodes,), minval=0.0, maxval=2 * jnp.pi)
@@ -1126,6 +1169,113 @@ class StellarSimTDep:
         )
 
 
+    def _save_checkpoint(self, checkpoint_dir, final=False):
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        fname = 'checkpoint_final.pkl' if final else f'checkpoint_step_{self.time_step}.pkl'
+        path = os.path.join(checkpoint_dir, fname)
+
+        particle_states = []
+        for p in self.particles:
+            particle_states.append({
+                'r_pos': p.r_pos.copy(),
+                'v': p.v.copy(),
+                'r_pos_sph': p.r_pos_sph.copy(),
+                'v_sph': p.v_sph.copy(),
+                'r_values': list(p.r_values),
+                'positions_xyz': list(p.positions_xyz),
+                'velocities': list(p.velocities),
+                'velocities_cart': list(p.velocities_cart),
+                'velocities_arr': p.velocities_arr.copy(),
+                'kinetic_energy': list(p.kinetic_energy),
+                'potential_energy': list(p.potential_energy),
+                'ang_mom': list(p.ang_mom),
+                'stellar_v_disp': list(p.stellar_v_disp),
+                'average_r': list(p.average_r),
+                'time_step': p.time_step,
+            })
+
+        state = {
+            'sim_time_step': self.time_step,
+            'no_time_steps': self.no_time_steps,
+            'sim_t': float(self.sim.t),
+            'particle_states': particle_states,
+        }
+
+        with open(path, 'wb') as f:
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        label = "Final checkpoint" if final else f"Checkpoint at step {self.time_step}"
+        print(f"{label} saved: {path}", flush=True)
+
+    def _load_checkpoint(self, checkpoint_dir):
+        """Find the latest checkpoint in checkpoint_dir and restore state. Returns True if found."""
+        if not os.path.isdir(checkpoint_dir):
+            return False
+
+        final_path = os.path.join(checkpoint_dir, 'checkpoint_final.pkl')
+        if os.path.isfile(final_path):
+            print(f"Final checkpoint found — simulation already complete. Loading {final_path}", flush=True)
+            with open(final_path, 'rb') as f:
+                state = pickle.load(f)
+            self.time_step = state['sim_time_step']
+            self.no_time_steps = state['no_time_steps']
+            self.sim.t = state['sim_t']
+            for particle, ps in zip(self.particles, state['particle_states']):
+                particle.r_pos = ps['r_pos']
+                particle.v = ps['v']
+                particle.r_pos_sph = ps['r_pos_sph']
+                particle.v_sph = ps['v_sph']
+                particle.r_values = ps['r_values']
+                particle.positions_xyz = ps['positions_xyz']
+                particle.velocities = ps['velocities']
+                particle.velocities_cart = ps['velocities_cart']
+                particle.velocities_arr = ps['velocities_arr']
+                particle.kinetic_energy = ps['kinetic_energy']
+                particle.potential_energy = ps['potential_energy']
+                particle.ang_mom = ps['ang_mom']
+                particle.stellar_v_disp = ps['stellar_v_disp']
+                particle.average_r = ps['average_r']
+                particle.time_step = ps['time_step']
+            return True
+
+        checkpoints = sorted(
+            [f for f in os.listdir(checkpoint_dir)
+             if f.startswith('checkpoint_step_') and f.endswith('.pkl')],
+            key=lambda f: int(f[len('checkpoint_step_'):-len('.pkl')])
+        )
+
+        if not checkpoints:
+            return False
+
+        path = os.path.join(checkpoint_dir, checkpoints[-1])
+        print(f"Resuming from checkpoint: {path}", flush=True)
+
+        with open(path, 'rb') as f:
+            state = pickle.load(f)
+
+        self.time_step = state['sim_time_step']
+        self.no_time_steps = state['no_time_steps']
+        self.sim.t = state['sim_t']
+
+        for particle, ps in zip(self.particles, state['particle_states']):
+            particle.r_pos = ps['r_pos']
+            particle.v = ps['v']
+            particle.r_pos_sph = ps['r_pos_sph']
+            particle.v_sph = ps['v_sph']
+            particle.r_values = ps['r_values']
+            particle.positions_xyz = ps['positions_xyz']
+            particle.velocities = ps['velocities']
+            particle.velocities_cart = ps['velocities_cart']
+            particle.velocities_arr = ps['velocities_arr']
+            particle.kinetic_energy = ps['kinetic_energy']
+            particle.potential_energy = ps['potential_energy']
+            particle.ang_mom = ps['ang_mom']
+            particle.stellar_v_disp = ps['stellar_v_disp']
+            particle.average_r = ps['average_r']
+            particle.time_step = ps['time_step']
+
+        return True
+
     def time_step_particle(self):
 
         """
@@ -1154,7 +1304,14 @@ class StellarSimTDep:
             #print(f"  Particle {i}: r = {float(particle.r_pos_sph[0]) * self.u.to_Kpc:.4f} kpc")
 
 
-    def run_simulation(self):
+    def run_simulation(self, checkpoint_every=50, checkpoint_dir=None):
+
+        if checkpoint_dir is None:
+            _script_dir = '/rds/general/user/jd925/ephemeral/'
+            checkpoint_dir = os.path.join(
+                _script_dir, "Checkpoints_test",
+                f"checkpoints_test_m22_{self.m22:g}_r0_{self.r_half:g}_frozen{int(self.frozen)}_static{int(self.static)}"
+            )
 
         start = time()
         aj = self.initialising_simulation()
@@ -1396,6 +1553,11 @@ class StellarSimTDep:
         
         self.maximum_rho_00 = [jnp.max(jnp.abs(self.rho_lms[:, 0, self.L_max_out - 1]))]
 
+        if self._load_checkpoint(checkpoint_dir):
+            print(f"Resumed from step {self.time_step} / {self.no_time_steps}", flush=True)
+        else:
+            print("No checkpoint found, starting from step 0.", flush=True)
+
         while self.time_step < self.no_time_steps:
 
             print(f"Time step {self.time_step + 1} / {self.no_time_steps}")
@@ -1449,6 +1611,11 @@ class StellarSimTDep:
 
 
             self.time_step += 1
+
+            if self.time_step % checkpoint_every == 0:
+                self._save_checkpoint(checkpoint_dir)
+
+        self._save_checkpoint(checkpoint_dir, final=True)
 
 
     def run_simulation_profiled(self, time_output='profile_time.prof',

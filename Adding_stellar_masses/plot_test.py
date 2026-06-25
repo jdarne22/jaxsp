@@ -31,8 +31,8 @@ LOUT      = args.Lout
 m22_str   = f"{M22:g}"
 r0_str_in = f"{R0:g}"
 lout_str  = f"{LOUT:g}"
-CKPT_DIR  = os.path.join(WORKDIR, f"checkpoints_m22_{m22_str}_r0_{r0_str_in}_Lout_{lout_str}")
-PLOT_DIR = "/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Plots/T_dep" + "/M_" + m22_str + "/"
+CKPT_DIR  = os.path.join(WORKDIR, f"checkpoints_frozen_m22_{m22_str}_r0_{r0_str_in}_Lout_{lout_str}")
+PLOT_DIR = "/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Plots/Sim_tests/"
 os.makedirs(PLOT_DIR, exist_ok=True)
 
 u = jsp.set_schroedinger_units(M22)
@@ -85,8 +85,8 @@ print(f"T_orb = {mean_T_orb:.3f} Gyr, T_c = {T_c:.3f} Gyr")
 fig, ax = plt.subplots(figsize=(10, 6))
 
 ax.plot(x, avg_r * to_Kpc, label="Average Particle Radius", zorder=3)
-#for i in range(N_part):
-    #ax.plot(x, r_all[i] * to_Kpc, alpha=0.2, color="gray")
+for i in range(N_part):
+    ax.plot(x, r_all[i] * to_Kpc, alpha=0.2, color="gray")
 ax.axhline(r_half_kpc, color="r", linestyle="--",
            label=f"Initial $r_{{1/2}}$ = {r_half_kpc:.3f} kpc")
 ax.axhline(float(np.mean(lambda_db_kpc)), color="g", linestyle="--",
@@ -103,10 +103,10 @@ ax.text(1.02, 0.98, info, transform=ax.transAxes,
 
 ax.set_xlabel("Time [Gyr]")
 ax.set_ylabel("Average Stellar Radius [kpc]")
-ax.set_title(f"Average Stellar Radius vs Time  (m22={M22}, Lout={LOUT}, $r_{{1/2}}$={r_half_kpc:.3f} kpc)")
+ax.set_title(f"Average Stellar Radius vs Time  (m22={M22}, r0={R0}, Lout={LOUT}, $r_{{1/2}}$={r_half_kpc:.3f} kpc)")
 ax.legend(bbox_to_anchor=(1, 0.7))
 
-out1 = os.path.join(PLOT_DIR, f"t_dep_lf_m{m22_str}_R0_{r_half_str}_Lout{lout_str}.png")
+out1 = os.path.join(PLOT_DIR, f"frozen_lf_m{m22_str}_R0_{r_half_str}_Lout{lout_str}.png")
 fig.savefig(out1, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"\nSaved: {out1}")
@@ -128,7 +128,7 @@ axes[1].set_ylabel("Angular Momentum")
 axes[1].set_title("Angular Momentum vs Time")
 
 plt.tight_layout()
-out2 = os.path.join(PLOT_DIR, f"t_dep_lf_eng_amom_m{m22_str}_R0_{r_half_str}_Lout{lout_str}.png")
+out2 = os.path.join(PLOT_DIR, f"frozen_lf_eng_amom_m{m22_str}_R0_{r_half_str}_Lout{lout_str}.png")
 fig.savefig(out2, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"Saved: {out2}")

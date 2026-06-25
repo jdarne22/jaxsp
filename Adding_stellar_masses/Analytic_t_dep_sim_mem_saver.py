@@ -1125,7 +1125,7 @@ class StellarSimTDep:
                 dphi_lm_dr_at_parts, phi_lm_at_parts, Ylm_all, dY_dtheta, dY_dphi,
                 positions_sph[:, 0], positions_sph[:, 1],
             )
-            return *accs, phi_lm_at_parts, Ylm_all
+            return (*accs, phi_lm_at_parts, Ylm_all)
 
 
         return self.combine_acc_jit(

@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N Generating_m22_functions
+#PBS -N Precomp
 #PBS -l select=1:ncpus=4:mem=128gb:ngpus=4:gpu_type=RTX6000
 #PBS -l walltime=24:00:00
 #PBS -o /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/logs/job_precomp_output.log

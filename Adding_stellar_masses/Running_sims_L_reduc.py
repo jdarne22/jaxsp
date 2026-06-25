@@ -82,7 +82,7 @@ for L_out_frac in [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]:
                                   sparse_k_batch=sparse_k_batch, r_chunk_size=r_chunk_size, compute_dtype=compute_dtype, L_out_frac=L_out_frac)
 
 
-  sim.run_simulation(checkpoint_dir=f'/rds/general/user/jd925/ephemeral/Checkpoints/checkpoints_m22_{m22}_r0_{R_0}_Lout_{L_out_frac}')
+  sim.run_simulation(checkpoint_dir=f'/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Checkpoints/checkpoints_m22_{m22}_r0_{R_0}_Lout_{L_out_frac}')
 
   
   L_sims.append(sim)

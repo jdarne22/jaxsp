@@ -138,9 +138,12 @@ def init_wavefunction_params(
         linesearch="hager-zhang",
     )
 
-    log_aj2 = jnp.log(jnp.ones(eigenstate_library.J) / eigenstate_library.J)
+    J_orig = eigenstate_library.J
+    log_aj2 = jnp.log(jnp.ones(J_orig) / J_orig)
     # Shard the optimizer parameter vector along J so LBFGS history buffers
     # (history_size, J) are also distributed — the other large memory consumer.
+    # shard_j_arr may pad to the nearest multiple of n_dev; J_orig is used
+    # below to strip any padding before storing aj_2.
     if sharding_manager is not None:
         log_aj2 = sharding_manager.shard_j_arr(log_aj2)
     res = gd.run(log_aj2, precomputed_quantities=precomputed_quantities)
@@ -169,7 +172,7 @@ def init_wavefunction_params(
         return wavefunction_params(
             eigenstate_library=eigenstate_library.name,
             density_params=density_params.name,
-            aj_2=jnp.exp(params),
+            aj_2=jnp.exp(params[:J_orig]),
             r_min=r_min,
             r_fit=r_fit,
             total_mass=total_mass(density_params),
