@@ -14,6 +14,7 @@ import argparse
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 sys.path.insert(0, "/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses")
 import jax
@@ -43,19 +44,13 @@ print(f"Unit conversions: 1 code length = {to_Kpc:.4f} kpc, 1 code time = {to_Gy
 
 
 def load_latest_checkpoint(checkpoint_dir):
-    files = sorted(
-        [f for f in os.listdir(checkpoint_dir)
-         if f.startswith("checkpoint_step_") and f.endswith(".pkl")],
-        key=lambda f: int(f[len("checkpoint_step_"):-len(".pkl")])
-    )
+    files = [f for f in os.listdir(checkpoint_dir) if f.startswith("checkpoint_final") and f.endswith(".pkl")]
     if not files:
         raise FileNotFoundError(f"No checkpoints in {checkpoint_dir}")
     path = os.path.join(checkpoint_dir, files[-1])
-    step = int(files[-1][len("checkpoint_step_"):-len(".pkl")])
-    print(f"  Loading {path} (step {step})")
     with open(path, "rb") as f:
         state = pickle.load(f)
-    return state, step
+    return state
 
 
 # Auto-detect all L_out_frac directories for this m22 / r0 combination
@@ -70,6 +65,18 @@ if not dirs:
 L_out_fracs = [float(d.split("_Lout_")[-1]) for d in dirs]
 print(f"Found L_out_fracs: {L_out_fracs}")
 
+# Colour by L_out_frac: black at the largest frac (=1, the "truth"),
+# fading to light blue at the smallest frac. Keyed to the value, not the
+# index, so the mapping is stable regardless of which fracs are present.
+_cmap = LinearSegmentedColormap.from_list("Lfrac_kb", ["#a8dcf0", "black"])
+_fmin, _fmax = min(L_out_fracs), max(L_out_fracs)
+def _color_for(L_frac):
+    if L_frac == _fmax:
+        return "red"  # largest L_out_frac (=1, the "truth") stands out in red
+    t = 0.5 if _fmax == _fmin else (L_frac - _fmin) / (_fmax - _fmin)
+    return _cmap(t)   # t=1 -> black (near L_frac=max), t=0 -> light blue (L_frac=min)
+line_colors = [_color_for(L) for L in L_out_fracs]
+
 R_halves    = []
 r0_per_part = []   # per-particle initial radius (code units), for T_orb
 v0_all      = []
@@ -77,7 +84,7 @@ dt_Gyr      = None
 
 for ckpt_dir, L_frac in zip(dirs, L_out_fracs):
     print(f"\nL_out_frac = {L_frac}")
-    state, n_steps = load_latest_checkpoint(ckpt_dir)
+    state = load_latest_checkpoint(ckpt_dir)
 
     # Recover dt from checkpoint (sim_t is total elapsed code time)
     if dt_Gyr is None:
@@ -100,7 +107,8 @@ fig, ax = plt.subplots(figsize=(10, 6))
 
 for i, L_frac in enumerate(L_out_fracs):
     x = np.arange(len(R_halves[i])) * dt_Gyr
-    ax.plot(x, R_halves[i] * to_Kpc, label=f"L_out_frac={L_frac}", alpha=0.7)
+    ax.plot(x, R_halves[i] * to_Kpc, label=f"L_out_frac={L_frac}",
+            color=line_colors[i], alpha=0.9)
 
     v0_code    = v0_all[i]
     mean_T_orb = float(np.mean(2 * np.pi * r0_per_part[i] / v0_code)) * to_Gyr
@@ -129,14 +137,15 @@ print(f"\nSaved: {out1}")
 
 
 # --- Plot 2: Relative error vs time (truth = largest L_out_frac) ---
-R_truth = R_halves[5]
+R_truth = R_halves[0]
 
 fig, ax = plt.subplots(figsize=(10, 6))
 for i, L_frac in enumerate(L_out_fracs):
     n = min(len(R_halves[i]), len(R_truth))
     x = np.arange(n) * dt_Gyr
     err = np.abs(R_halves[i][:n] - R_truth[:n]) / R_truth[:n]
-    ax.plot(x, err, label=f"L_out_frac={L_frac}", alpha=0.7)
+    ax.plot(x, err, label=f"L_out_frac={L_frac}",
+            color=line_colors[i], alpha=0.9)
 
 ax.set_xlabel("Time [Gyr]")
 ax.set_ylabel("Relative Error in Half-Mass Radius")

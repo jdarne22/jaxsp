@@ -1,6 +1,6 @@
 #!/bin/bash
 #PBS -N Running_sims
-#PBS -l select=1:ncpus=1:mem=16gb:ngpus=4:gpu_type=L40S
+#PBS -l select=1:ncpus=1:mem=256gb:ngpus=4:gpu_type=L40S
 #PBS -l walltime=24:00:00
 #PBS -o /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/logs/job_output.log
 #PBS -e /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/logs/job_error.log

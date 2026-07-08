@@ -52,18 +52,18 @@ importlib.reload(ATDS_MS)
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-dt_override = 1
+dt_override = 0.5
 ramp_time = 0
 
-l_band_size = 128
+l_band_size = 32
 use_multi_gpu = True
-sparse_k_batch=16384
-r_chunk_size = 32
+sparse_k_batch=8192
+r_chunk_size = 16
 compute_dtype = jnp.complex64
 
-L_out_frac = 0.5
+L_out_frac = 0.2
 
-m22 = 30
+m22 = 50
 R0 = [1]
 
 for R0 in R0:

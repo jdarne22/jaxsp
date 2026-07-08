@@ -85,8 +85,9 @@ print(f"T_orb = {mean_T_orb:.3f} Gyr, T_c = {T_c:.3f} Gyr")
 fig, ax = plt.subplots(figsize=(10, 6))
 
 ax.plot(x, avg_r * to_Kpc, label="Average Particle Radius", zorder=3)
+ax.plot(x, np.median(r_all, axis=0) * to_Kpc, label="Median Particle Radius", zorder=2)
 #for i in range(N_part):
-    #ax.plot(x, r_all[i] * to_Kpc, alpha=0.2, color="gray")
+#    ax.plot(x, r_all[i] * to_Kpc, alpha=0.2, color="gray")
 ax.axhline(r_half_kpc, color="r", linestyle="--",
            label=f"Initial $r_{{1/2}}$ = {r_half_kpc:.3f} kpc")
 ax.axhline(float(np.mean(lambda_db_kpc)), color="g", linestyle="--",
@@ -106,7 +107,7 @@ ax.set_ylabel("Average Stellar Radius [kpc]")
 ax.set_title(f"Average Stellar Radius vs Time  (m22={M22}, Lout={LOUT}, $r_{{1/2}}$={r_half_kpc:.3f} kpc)")
 ax.legend(bbox_to_anchor=(1, 0.7))
 
-out1 = os.path.join(PLOT_DIR, f"t_dep_lf_m{m22_str}_R0_{r_half_str}_Lout{lout_str}.png")
+out1 = os.path.join(PLOT_DIR, f"t_dep_lf_m{m22_str}_R0_{r_half_str}_Lout{lout_str}_part_{N_part}.png")
 fig.savefig(out1, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"\nSaved: {out1}")
@@ -128,7 +129,7 @@ axes[1].set_ylabel("Angular Momentum")
 axes[1].set_title("Angular Momentum vs Time")
 
 plt.tight_layout()
-out2 = os.path.join(PLOT_DIR, f"t_dep_lf_eng_amom_m{m22_str}_R0_{r_half_str}_Lout{lout_str}.png")
+out2 = os.path.join(PLOT_DIR, f"t_dep_lf_eng_amom_m{m22_str}_R0_{r_half_str}_Lout{lout_str}_part_{N_part}.png")
 fig.savefig(out2, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"Saved: {out2}")

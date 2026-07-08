@@ -3,7 +3,6 @@ import jax
 print(jax.devices())
 jax.config.update("jax_enable_x64", True)
 
-
 import os
 import pickle
 from time import time
@@ -20,7 +19,6 @@ import numpy as np
 import jax.numpy as jnp
 from jaxsp.constants import GN
 
-import gaunt_funcs as gf
 import Stellar_sim_funcs as SSF
 
 import Poisson_solver as PS
@@ -31,7 +29,6 @@ import Memory_speed_savers as MSS
 
 import importlib
 importlib.reload(SSF)
-importlib.reload(gf)
 importlib.reload(PS)
 importlib.reload(SM)
 importlib.reload(MSS)
@@ -42,19 +39,22 @@ class Simulation_Particle:
     """
 
     def __init__(self, particle_id, init_pos_cart, init_vel_cart, u):
-
+        
+        # Particle ID
         self.id = particle_id
+
+        # Units
         self.u = u
 
-        # Current Cartesian state
-        self.r_pos = np.array(init_pos_cart)   # (3,)
-        self.v     = np.array(init_vel_cart)    # (3,)
+        # Starting Cartesian state
+        self.r_pos = np.array(init_pos_cart)   
+        self.v     = np.array(init_vel_cart)  
 
         # Convert to spherical for initial record
         self.r_pos_sph = SSF.Cartesian_to_sph(self.r_pos[0], self.r_pos[1], self.r_pos[2])
         self.v_sph = SSF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2],self.v[0], self.v[1], self.v[2])
 
-
+        # History of velocities, stellar dispersions, radii, positions, energies and angular momenta
         self.velocities      = [self.v_sph]
         self.velocities_cart = [self.v]
         self.stellar_v_disp = [0]
@@ -66,18 +66,10 @@ class Simulation_Particle:
         self.kinetic_energy = [1/2 * np.sum(self.v**2)]
         self.ang_mom = [np.linalg.norm(np.cross(self.r_pos, self.v))]
 
+
+        # Keep record of current timestep
         self.time_step = 0
 
-
-    def Change_to_new_vel(self, v_corrected):
-
-        self.v = np.array(v_corrected)
-        self.v_sph = SSF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2], v_corrected[0], v_corrected[1], v_corrected[2])
-        self.velocities      = [self.v_sph]
-        self.velocities_cart = [self.v]
-
-        self.kinetic_energy = [1/2 * np.sum(self.v**2)]
-        self.ang_mom = [np.linalg.norm(np.cross(self.r_pos, self.v))]
 
     def Create_V_array(self, no_time_steps):
         # Preallocate (no_time_steps + 1, 3) so row 0 holds the initial v_sph

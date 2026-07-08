@@ -17,4 +17,4 @@ mkdir -p logs
 mkdir -p /rds/general/user/jd925/home/.jax_cache
 
 
-python -u $WORKDIR/plot_t_dep_final.py --m22 20 --r0 1 --Lout 0.5 2>&1 | tee $WORKDIR/logs/live_output_plot_t_dep_final.log
+python -u $WORKDIR/plot_t_dep_final.py --m22 10 --r0 1 --Lout 1 2>&1 | tee $WORKDIR/logs/live_output_plot_t_dep_final.log

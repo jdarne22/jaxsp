@@ -1,0 +1,153 @@
+E0708 06:54:36.654400  321687 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0708 06:54:36.654556  321688 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0708 06:54:36.654585  321689 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0708 06:54:36.654649  321690 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0708 06:54:36.692585  321686 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0708 06:54:36.692693  321682 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0708 06:54:36.715958  321684 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0708 06:54:36.716072  321685 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+E0708 06:54:36.716097  321683 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+[mem_saver] Multi-GPU sharding enabled across 4 devices.
+Loading precomputed R_j_r from /rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/precomputed_wf/precomputed_R_j_r_m22_50_rbins_1000.npz...
+l max from jaxsp: 1207
+SphHT bandwidth truncated by L_out_frac=0.2: L_max_out = 483 (natural 2L-1 = 2415, floor L = 1208)
+L_max_out 483 not divisible by 4 devices; rounding down to 480 for L-sharding.
+W0708 08:24:46.897945  321604 bfc_allocator.cc:514] Allocator (GPU_0_bfc) ran out of memory trying to allocate 4.33GiB (rounded to 4654793216)requested by op 
+If the cause is memory fragmentation maybe the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' will improve the situation. 
+Current allocation summary follows.
+Current allocation summary follows.
+W0708 08:24:46.898196  321604 bfc_allocator.cc:525] ************************************************_*******************______*********************____*
+Mode mask (L_max_out=480 < L=1208): dropped 380677479 k-modes and 1228864 unique (l,m) pairs with l >= 480. Remaining: 201171656 k-modes, 230400 unique pairs.
+Particle 0: v_circ = 15.550 km/s
+Particle 1: v_circ = 15.497 km/s
+Particle 2: v_circ = 15.551 km/s
+Particle 3: v_circ = 15.630 km/s
+Particle 4: v_circ = 15.506 km/s
+Particle 5: v_circ = 15.587 km/s
+Particle 6: v_circ = 15.567 km/s
+Particle 7: v_circ = 15.626 km/s
+Particle 8: v_circ = 15.640 km/s
+Particle 9: v_circ = 15.591 km/s
+Particle 10: v_circ = 15.491 km/s
+Particle 11: v_circ = 15.556 km/s
+Particle 12: v_circ = 15.531 km/s
+Particle 13: v_circ = 15.621 km/s
+Particle 14: v_circ = 15.516 km/s
+Particle 15: v_circ = 15.568 km/s
+Particle 16: v_circ = 15.572 km/s
+Particle 17: v_circ = 15.535 km/s
+Particle 18: v_circ = 15.645 km/s
+Particle 19: v_circ = 15.607 km/s
+Particle 20: v_circ = 15.518 km/s
+Particle 21: v_circ = 15.572 km/s
+Particle 22: v_circ = 15.642 km/s
+Particle 23: v_circ = 15.581 km/s
+Particle 24: v_circ = 15.498 km/s
+Particle 25: v_circ = 15.543 km/s
+Particle 26: v_circ = 15.544 km/s
+Particle 27: v_circ = 15.478 km/s
+Particle 28: v_circ = 15.546 km/s
+Particle 29: v_circ = 15.566 km/s
+Particle 30: v_circ = 15.642 km/s
+Particle 31: v_circ = 15.615 km/s
+Particle 32: v_circ = 15.608 km/s
+Particle 33: v_circ = 15.617 km/s
+Particle 34: v_circ = 15.607 km/s
+Particle 35: v_circ = 15.536 km/s
+Particle 36: v_circ = 15.526 km/s
+Particle 37: v_circ = 15.521 km/s
+Particle 38: v_circ = 15.656 km/s
+Particle 39: v_circ = 15.564 km/s
+Particle 40: v_circ = 15.573 km/s
+Particle 41: v_circ = 15.578 km/s
+Particle 42: v_circ = 15.552 km/s
+Particle 43: v_circ = 15.616 km/s
+Particle 44: v_circ = 15.475 km/s
+Particle 45: v_circ = 15.625 km/s
+Particle 46: v_circ = 15.607 km/s
+Particle 47: v_circ = 15.590 km/s
+Particle 48: v_circ = 15.569 km/s
+Particle 49: v_circ = 15.628 km/s
+Particle 50: v_circ = 15.603 km/s
+Particle 51: v_circ = 15.489 km/s
+Particle 52: v_circ = 15.646 km/s
+Particle 53: v_circ = 15.486 km/s
+Particle 54: v_circ = 15.610 km/s
+Particle 55: v_circ = 15.535 km/s
+Particle 56: v_circ = 15.565 km/s
+Particle 57: v_circ = 15.595 km/s
+Particle 58: v_circ = 15.541 km/s
+Particle 59: v_circ = 15.608 km/s
+Particle 60: v_circ = 15.564 km/s
+Particle 61: v_circ = 15.640 km/s
+Particle 62: v_circ = 15.526 km/s
+Particle 63: v_circ = 15.523 km/s
+Particle 64: v_circ = 15.496 km/s
+Particle 65: v_circ = 15.567 km/s
+Particle 66: v_circ = 15.609 km/s
+Particle 67: v_circ = 15.549 km/s
+Particle 68: v_circ = 15.650 km/s
+Particle 69: v_circ = 15.621 km/s
+Particle 70: v_circ = 15.632 km/s
+Particle 71: v_circ = 15.498 km/s
+Particle 72: v_circ = 15.524 km/s
+Particle 73: v_circ = 15.479 km/s
+Particle 74: v_circ = 15.510 km/s
+Particle 75: v_circ = 15.604 km/s
+Particle 76: v_circ = 15.575 km/s
+Particle 77: v_circ = 15.572 km/s
+Particle 78: v_circ = 15.596 km/s
+Particle 79: v_circ = 15.581 km/s
+Particle 80: v_circ = 15.608 km/s
+Particle 81: v_circ = 15.544 km/s
+Particle 82: v_circ = 15.477 km/s
+Particle 83: v_circ = 15.560 km/s
+Particle 84: v_circ = 15.552 km/s
+Particle 85: v_circ = 15.641 km/s
+Particle 86: v_circ = 15.598 km/s
+Particle 87: v_circ = 15.475 km/s
+Particle 88: v_circ = 15.553 km/s
+Particle 89: v_circ = 15.633 km/s
+Particle 90: v_circ = 15.595 km/s
+Particle 91: v_circ = 15.520 km/s
+Particle 92: v_circ = 15.533 km/s
+Particle 93: v_circ = 15.655 km/s
+Particle 94: v_circ = 15.573 km/s
+Particle 95: v_circ = 15.636 km/s
+Particle 96: v_circ = 15.538 km/s
+Particle 97: v_circ = 15.559 km/s
+Particle 98: v_circ = 15.543 km/s
+Particle 99: v_circ = 15.574 km/s
+Mean r: 1.001 kpc
+Min T_orb: 387.266 Myr
+T_c: 0.409 Myr
+dt: 0.001 Gyr
+Number of time steps: 12231
+Ramp phase: 0 steps (0.000 Gyr)
+Main phase: 12231 steps (9.999 Gyr)
+Total: 12231 steps
+W0708 08:26:23.713841  321682 bfc_allocator.cc:514] Allocator (GPU_0_bfc) ran out of memory trying to allocate 19.60GiB (rounded to 21048256768)requested by op 
+If the cause is memory fragmentation maybe the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' will improve the situation. 
+Current allocation summary follows.
+Current allocation summary follows.
+W0708 08:26:23.714128  321682 bfc_allocator.cc:525] ***___********___________________________________*******************_*******************************
+E0708 08:26:24.393709  321688 rendezvous.cc:116] [id=0] This thread has been waiting for `[2] [rank=2] [run_id=1521162483] Acquire clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=0; incarnations=[]` for 10 seconds and may be stuck. Expected 4 threads to join the rendezvous, but not all of them arrived on time.
+E0708 08:26:24.393758  321685 rendezvous.cc:116] [id=1] This thread has been waiting for `[1] [rank=1] [run_id=1521162483] Acquire clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=0; incarnations=[]` for 10 seconds and may be stuck. Expected 4 threads to join the rendezvous, but not all of them arrived on time.
+E0708 08:26:24.393811  321691 rendezvous.cc:116] [id=2] This thread has been waiting for `[3] [rank=3] [run_id=1521162483] Acquire clique: devices=4:[0,1,2,3]; local_participants=4; communication_id=0; incarnations=[]` for 10 seconds and may be stuck. Expected 4 threads to join the rendezvous, but not all of them arrived on time.

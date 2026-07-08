@@ -270,20 +270,39 @@ class StellarSimTDep:
                     return False
             return True
 
+        # Pure vmapped function — no state, define once for all paths.
+        self._eval_library = jax.vmap(jax.vmap(jsp.eval_radial_eigenmode, in_axes=(None, 0)), in_axes=(0, None))
+
         R_j_r = None
+        l = E = aj_2 = total_mass = None
         if os.path.isfile(r_j_r_fname) and os.path.isfile(pkl_fname):
             data = np.load(r_j_r_fname)
             if _cache_valid(data, cache_params):
-                print(f"Loading precomputed R_j_r from {r_j_r_fname}...")
-                R_j_r = data['R_j_r']
                 rmin = data['rmin'].item()
                 rmax = data['rmax'].item()
+                # radial_eigenmode_params is needed every timestep (per-particle radial
+                # eval). Load pkl, store just that pytree on self, then free the bulk.
                 with open(pkl_fname, 'rb') as f:
                     objs = pickle.load(f)
-                eigenstate_lib    = objs['eigenstate_lib']
-                wavefunction_params = objs['wavefunction_params']
-                eval_library = jax.vmap(jax.vmap(jsp.eval_radial_eigenmode, in_axes=(None, 0)), in_axes=(0, None))
-
+                self.radial_eigenmode_params = objs['eigenstate_lib'].radial_eigenmode_params
+                if 'l' in data.files:
+                    # v2: float32 R_j_r + scalar arrays in npz.
+                    # Peak: pkl (~4 GB briefly) → del bulk → radial_params + float32 R_j_r (~5 GB).
+                    print(f"Loading precomputed R_j_r from {r_j_r_fname}...")
+                    l          = data['l']
+                    E          = data['E']
+                    aj_2       = data['aj_2']
+                    total_mass = data['total_mass'].item()
+                else:
+                    # v1: float64 R_j_r. Delete cache files and re-run to get v2.
+                    print(f"Loading precomputed R_j_r from {r_j_r_fname} "
+                          f"(v1 format; delete cache files to regenerate as v2)...")
+                    l          = np.array(objs['eigenstate_lib'].radial_eigenmode_params.l)
+                    E          = np.array(objs['eigenstate_lib'].radial_eigenmode_params.E)
+                    aj_2       = np.array(objs['wavefunction_params'].aj_2)
+                    total_mass = float(objs['wavefunction_params'].total_mass)
+                del objs        # free bulk; self.radial_eigenmode_params keeps its arrays
+                R_j_r = data['R_j_r']      # float32 (v2) or float64 (v1)
             else:
                 print(f"Cached {r_j_r_fname} stale (parameter mismatch); recomputing.")
 
@@ -305,8 +324,6 @@ class StellarSimTDep:
             rmax = jsp.enclosing_radius(0.999, density_params)
             potential_params = jsp.init_potential_params(density_params, rmin, rmax, N)
 
-            eval_library = jax.vmap(jax.vmap(jsp.eval_radial_eigenmode, in_axes=(None, 0)), in_axes=(0,None))
-
             N = 1024
             a = 1
             b = 10
@@ -322,14 +339,21 @@ class StellarSimTDep:
 
 
             r = jnp.logspace(jnp.log10(rmin), jnp.log10(rmax), self.no_radius_bins)
-            R_j_r = eval_library(r, eigenstate_lib.radial_eigenmode_params)  # (Nr, Nj)
+            R_j_r = self._eval_library(r, eigenstate_lib.radial_eigenmode_params)  # (Nr, Nj)
 
-            np.savez(r_j_r_fname, R_j_r=np.array(R_j_r), rmin=rmin, rmax=rmax, **cache_params)
+            self.radial_eigenmode_params = eigenstate_lib.radial_eigenmode_params
+            l          = np.array(eigenstate_lib.radial_eigenmode_params.l)
+            E          = np.array(eigenstate_lib.radial_eigenmode_params.E)
+            aj_2       = np.array(wavefunction_params.aj_2)
+            total_mass = float(wavefunction_params.total_mass)
+
+            np.savez(r_j_r_fname,
+                     R_j_r=np.array(R_j_r, dtype=np.float32),
+                     l=l, E=E, aj_2=aj_2, total_mass=np.float64(total_mass),
+                     rmin=rmin, rmax=rmax, **cache_params)
             with open(pkl_fname, 'wb') as f:
                 pickle.dump({'eigenstate_lib': eigenstate_lib, 'wavefunction_params': wavefunction_params}, f)
 
-                
-        l = eigenstate_lib.radial_eigenmode_params.l
         self.l = l
 
         print('l max from jaxsp:', max(l))
@@ -372,13 +396,11 @@ class StellarSimTDep:
         r = jnp.logspace(jnp.log10(self.rmin), jnp.log10(self.rmax), self.no_radius_bins)
         self.r = r
 
-        total_mass = wavefunction_params.total_mass
         self.total_mass = total_mass
-        aj_2 = wavefunction_params.aj_2
 
         # Eigen energies stay in float64 — they multiply by t at every
         # timestep and small phase errors compound badly over a long sim.
-        self.eigen_energies = eigenstate_lib.radial_eigenmode_params.E
+        self.eigen_energies = jnp.asarray(E, dtype=jnp.float64)
 
         # Heavy array — cast to compute_real_dtype (float32 by default) and
         # shard along Nj across all visible GPUs. At m22=50, R_j_r is ~30 GB
@@ -602,9 +624,6 @@ class StellarSimTDep:
 
         sim_particles = sim.particles
 
-        autodiff_data = {'eval_library': eval_library, 'eigenstate_lib': eigenstate_lib}
-        self.autodiff_data = autodiff_data
-
         self._force_call_count = 0
 
         def additional_forces_step(_reb_sim):
@@ -632,11 +651,7 @@ class StellarSimTDep:
             self._force_call_count += 1
 
             # Single batched acceleration computation — parallel over all particles
-            a_r_all, a_theta_all, a_phi_all = self.construct_acc_master_func(
-                positions_sph,
-                self.autodiff_data['eval_library'],
-                self.autodiff_data['eigenstate_lib']
-            )
+            a_r_all, a_theta_all, a_phi_all = self.construct_acc_master_func(positions_sph)
 
             # Pull accs back to host once, then do the spherical->Cartesian
             # rotation batched in numpy.
@@ -741,16 +756,22 @@ class StellarSimTDep:
         projection of the frozen field.
         """
         Nr = self.R_j_r_fixed.shape[0]
+        Nk = len(self.parent_j)
 
-        # a_k · R_{parent_j[k]}(r): (Nk, Nr) complex. R_j_r_fixed is real and
-        # may be sharded along Nj; the gather collapses Nj to Nk so the
-        # output is unsharded.
-        aR = (self.aj[:, None] *
-              self.R_j_r_fixed[:, self.parent_j].T.astype(self.compute_dtype))
-
-        # Scatter-add into F over unique (l, m) slots.
+        # Build F[u, r] = Σ_{k: lm_idx[k]=u} a_k · R_{parent_j[k]}(r) in
+        # k-mode batches so we never materialise the full (Nr, Nk) gather
+        # (which would be ~149 GB at m22=10, Nr=1000, Nk=37M).
         F = jnp.zeros((self.N_unique_sphht, Nr), dtype=self.compute_dtype)
-        F = F.at[self.lm_idx_per_mode].add(aR)
+        batch = self.sparse_k_batch
+        for k0 in range(0, Nk, batch):
+            k1 = min(k0 + batch, Nk)
+            pj_b  = self.parent_j[k0:k1]            # (b,)
+            aj_b  = self.aj[k0:k1]                  # (b,) complex
+            idx_b = self.lm_idx_per_mode[k0:k1]     # (b,)
+            # (Nr, b) gather — small, fits in memory
+            aR_b = (self.R_j_r_fixed[:, pj_b].astype(self.compute_dtype)
+                    * aj_b[None, :])                 # (Nr, b)
+            F = F.at[idx_b].add(aR_b.T)             # scatter (b, Nr) -> (N_unique, Nr)
 
         rho_sph = (self.total_mass / (4.0 * jnp.pi)) * jnp.sum(jnp.abs(F) ** 2, axis=0)
         return rho_sph.astype(jnp.float64)
@@ -1087,7 +1108,7 @@ class StellarSimTDep:
 
         return a_r, a_theta, a_phi
 
-    def construct_acc_master_func(self, positions_sph, eval_library, eigenstate_lib, poten = False):
+    def construct_acc_master_func(self, positions_sph, poten=False):
 
         '''
         Constructing acc vectors for all particles master function.
@@ -1095,14 +1116,13 @@ class StellarSimTDep:
         '''
 
         if not hasattr(self, 'calc_rho_lm_at_parts_and_call_insert_jit'):
-            self._eval_library = eval_library
             self.calc_rho_lm_at_parts_and_call_insert_jit = jax.jit(self.calc_rho_lm_at_parts_and_call_insert)
             self.combine_acc_jit = jax.jit(StellarSimTDep.combine_acc)
 
         dphi_lm_dr_at_parts, phi_lm_at_parts = self.calc_rho_lm_at_parts_and_call_insert_jit(
             positions_sph,
             self.current_phase,
-            eigenstate_lib.radial_eigenmode_params,
+            self.radial_eigenmode_params,
             self.a_u_j,
             self._jit_all_i,
             self._jit_all_j,
@@ -1117,7 +1137,7 @@ class StellarSimTDep:
             # (outside JIT / lax.map) so its plot branch — guarded by
             # `not isinstance(particle_r, jax.core.Tracer)` — fires.
             _p0_r = positions_sph[0:1, 0]
-            _R_j_p0 = self._eval_library(_p0_r, eigenstate_lib.radial_eigenmode_params)
+            _R_j_p0 = self._eval_library(_p0_r, self.radial_eigenmode_params)
 
             phase_c = self.current_phase.astype(self.compute_dtype)
 
@@ -1160,7 +1180,7 @@ class StellarSimTDep:
                 dphi_lm_dr_at_parts, phi_lm_at_parts, Ylm_all, dY_dtheta, dY_dphi,
                 positions_sph[:, 0], positions_sph[:, 1],
             )
-            return *accs, phi_lm_at_parts, Ylm_all
+            return (*accs, phi_lm_at_parts, Ylm_all)
 
 
         return self.combine_acc_jit(
@@ -1524,10 +1544,7 @@ class StellarSimTDep:
         r_pos_sphs = jnp.array([particle.r_pos_sph for particle in self.particles])  # (N_particles, 3)
 
         a_r, _, _, phi_lm_at_r, Y_lm_all = self.construct_acc_master_func(
-            r_pos_sphs,
-            self.autodiff_data['eval_library'],
-            self.autodiff_data['eigenstate_lib'],
-            poten = True
+            r_pos_sphs, poten=True
         )
 
 
@@ -1597,10 +1614,7 @@ class StellarSimTDep:
             # Compute phi at updated particle positions for potential energy tracking
             r_pos_sphs_new = jnp.array([p.r_pos_sph for p in self.particles])
             _, _, _, phi_lm_new, Ylm_new = self.construct_acc_master_func(
-                r_pos_sphs_new,
-                self.autodiff_data['eval_library'],
-                self.autodiff_data['eigenstate_lib'],
-                poten=True
+                r_pos_sphs_new, poten=True
             )
 
             

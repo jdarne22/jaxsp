@@ -46,7 +46,7 @@ importlib.reload(gf)
 
 sm = ShardingManager(use_multi_gpu=True)
 
-m22_list = [55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+m22_list = [25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
 R_bins = [1000]
 
 
@@ -89,11 +89,13 @@ for m22 in m22_list:
 
         Compute = True
 
-        if os.path.isfile(r_j_r_fname) and os.path.isfile(pkl_fname):
+        if os.path.isfile(r_j_r_fname):
             data = np.load(r_j_r_fname)
-            if _cache_valid(data, cache_params):
-                print(f"Loading precomputed R_j_r from {r_j_r_fname}...")
+            if _cache_valid(data, cache_params) and 'l' in data.files:
+                print(f"Cache already v2 for m22={m22}, R_bin={R_bin}; skipping.")
                 Compute = False
+            elif _cache_valid(data, cache_params):
+                print(f"Cache is v1 (float64, no embedded arrays); recomputing as v2...")
             else:
                 print(f"Cached {r_j_r_fname} stale (parameter mismatch); recomputing.")
 
@@ -153,10 +155,18 @@ for m22 in m22_list:
 
             R_j_r = np.concatenate(R_j_r_chunks, axis=1)
 
-            np.savez(r_j_r_fname, R_j_r=R_j_r, rmin=rmin, rmax=rmax, **cache_params)
+            l          = np.array(eigenstate_lib.radial_eigenmode_params.l)
+            E          = np.array(eigenstate_lib.radial_eigenmode_params.E)
+            aj_2       = np.array(wavefunction_params.aj_2)
+            total_mass = float(wavefunction_params.total_mass)
+
+            np.savez(r_j_r_fname,
+                     R_j_r=R_j_r.astype(np.float32),
+                     l=l, E=E, aj_2=aj_2, total_mass=np.float64(total_mass),
+                     rmin=rmin, rmax=rmax, **cache_params)
             with open(pkl_fname, 'wb') as f:
                 pickle.dump({'eigenstate_lib': eigenstate_lib, 'wavefunction_params': wavefunction_params}, f)
-            
+
             del eigenstate_lib, wavefunction_params, R_j_r, potential_params, density_params, r
             gc.collect()
             jax.clear_caches()
