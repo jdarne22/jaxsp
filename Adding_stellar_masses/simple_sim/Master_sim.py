@@ -3,7 +3,6 @@ import jax
 print(jax.devices())
 jax.config.update("jax_enable_x64", True)
 
-
 import os
 import pickle
 from time import time
@@ -20,111 +19,20 @@ import numpy as np
 import jax.numpy as jnp
 from jaxsp.constants import GN
 
-import gaunt_funcs as gf
 import Stellar_sim_funcs as SSF
 
 import Poisson_solver as PS
 import Sharding_manager as SM
 import Memory_speed_savers as MSS
 
-
+import Particles as Part
+import Sim_init as Sim_init
 
 import importlib
 importlib.reload(SSF)
-importlib.reload(gf)
 importlib.reload(PS)
 importlib.reload(SM)
 importlib.reload(MSS)
-
-class Simulation_Particle:
-    """
-    Stores the state (position + velocity) and history for a single stellar particle.
-    """
-
-    def __init__(self, particle_id, init_pos_cart, init_vel_cart, u):
-
-        self.id = particle_id
-        self.u = u
-
-        # Current Cartesian state
-        self.r_pos = np.array(init_pos_cart)   # (3,)
-        self.v     = np.array(init_vel_cart)    # (3,)
-
-        # Convert to spherical for initial record
-        self.r_pos_sph = SSF.Cartesian_to_sph(self.r_pos[0], self.r_pos[1], self.r_pos[2])
-        self.v_sph = SSF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2],self.v[0], self.v[1], self.v[2])
-
-
-        self.velocities      = [self.v_sph]
-        self.velocities_cart = [self.v]
-        self.stellar_v_disp = [0]
-        self.r_values       = [float(self.r_pos_sph[0])]
-        self.average_r      = [float(self.r_pos_sph[0])]
-        self.positions_xyz  = [[float(self.r_pos[0]), float(self.r_pos[1]), float(self.r_pos[2])]]
-
-        self.potential_energy = []
-        self.kinetic_energy = [1/2 * np.sum(self.v**2)]
-        self.ang_mom = [np.linalg.norm(np.cross(self.r_pos, self.v))]
-
-        self.time_step = 0
-
-
-    def Change_to_new_vel(self, v_corrected):
-
-        self.v = np.array(v_corrected)
-        self.v_sph = SSF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2], v_corrected[0], v_corrected[1], v_corrected[2])
-        self.velocities      = [self.v_sph]
-        self.velocities_cart = [self.v]
-
-        self.kinetic_energy = [1/2 * np.sum(self.v**2)]
-        self.ang_mom = [np.linalg.norm(np.cross(self.r_pos, self.v))]
-
-    def Create_V_array(self, no_time_steps):
-        # Preallocate (no_time_steps + 1, 3) so row 0 holds the initial v_sph
-        # and rows 1..no_time_steps hold the values written by update_state.
-        self.velocities_arr = np.zeros((no_time_steps + 1, 3))
-        self.velocities_arr[0] = np.asarray(self.v_sph)
-
-
-    def update_state(self, new_pos_cart, new_vel_cart):
-        """
-        Called after each rebound integration step to update this particle's
-        Cartesian and spherical state and append to history arrays.
-
-        """
-        x, y, z    = float(new_pos_cart[0]), float(new_pos_cart[1]), float(new_pos_cart[2])
-        vx, vy, vz = float(new_vel_cart[0]), float(new_vel_cart[1]), float(new_vel_cart[2])
-
-        self.r_pos = np.array([x, y, z])
-        self.v     = np.array([vx, vy, vz])
-
-        r, theta, phi      = SSF.Cartesian_to_sph_np(x, y, z)
-        vr, vtheta, vphi   = SSF.Cartesian_to_sph_vel_np(x, y, z, vx, vy, vz)
-        self.r_pos_sph     = np.array([r, theta, phi])
-        self.v_sph         = np.array([vr, vtheta, vphi])
-
-        self.velocities.append(self.v_sph)
-        self.velocities_cart.append(self.v)
-
-        # In-place write into preallocated array; row 0 is the initial v_sph,
-        # so the k-th update writes at row k.
-        self.velocities_arr[self.time_step + 1] = self.v_sph
-        valid = self.velocities_arr[:self.time_step + 2]
-
-        new_vel_disp = (
-            np.std(valid[:, 0])**2
-            + np.std(valid[:, 1])**2
-            + np.std(valid[:, 2])**2
-        ) ** 0.5
-
-        self.stellar_v_disp.append(new_vel_disp)
-
-        self.r_values.append(r)
-        self.positions_xyz.append([x, y, z])
-        self.kinetic_energy.append(0.5 * (vx*vx + vy*vy + vz*vz))
-        self.ang_mom.append(np.linalg.norm(np.cross(self.r_pos, self.v)))
-
-        self.time_step += 1
 
 
 #--------------------------------------------------------------------------------------------------------------------
@@ -137,24 +45,40 @@ class StellarSimTDep:
     class to update particle states.
     '''
 
-    def __init__(self, m22, r_half, r_half_width, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac,
-                 no_radius_bins, SphHT, integrator, plot, dt_override, ramp_time, sparse_k_batch, r_chunk_size, l_band_size,
+    def __init__(self, m22, r_half, r_half_width, no_of_particles, total_evolve_time, r_min, r_max_enclosing_frac,
+                 no_radius_bins, dt_override, ramp_time, sparse_k_batch, r_chunk_size, l_band_size,
                  compute_dtype, use_multi_gpu=True, L_out_frac=1.0):
 
-        self.stellar_v_disp = []
-        self.average_r = []
+        # Setting units system for given m22
+        self.m22 = m22
+        self.u = jsp.set_schroedinger_units(self.m22)
+
+        # Number of particles
+        self.no_of_particles = no_of_particles
+
+        # List of Simulation_Particle instances — populated in initialising_simulation()
+        self.particles = []
+
+        # For initial conditions of particles
+        self.r_half = r_half
+        self.r_half_width = r_half_width
+
+        # Simulation radial parameters
+        self.r_min = r_min
+        self.r_max_enclosing_frac = r_max_enclosing_frac
+        self.no_radius_bins = no_radius_bins
+
+        # Correct G units based from jaxsp
+        self.G = GN.value * (self.u.from_cm**3) / (self.u.from_g * self.u.from_s**2)
+
+        # Simulation time parameters
+        self.total_evolve_time = total_evolve_time
         self.time_step = 0
-        self.SphHT = SphHT
-        self.integrator = integrator
-        self.plot = plot
         self.dt_override = dt_override
         self.ramp_time = ramp_time
-        self.L_out_frac = L_out_frac
 
-        # ---------- Memory-saving knobs ----------
-        # complex64 / float32 for the heavy density / R_j_r path. Eigenenergies
-        # and the per-step phase stay in float64 — they multiply by t and need
-        # the precision for long-time stability.
+        # ----------------MEMORY SAVERS----------------
+
         self.compute_dtype = jnp.dtype(compute_dtype)
         if self.compute_dtype == jnp.complex64:
             self.compute_real_dtype = jnp.float32
@@ -163,27 +87,16 @@ class StellarSimTDep:
         else:
             raise ValueError(f"compute_dtype must be complex64 or complex128, got {compute_dtype}")
 
-        # Chunk size for streaming the (l,m) integration loop in
-        # `compute_phi_lm_and_deriv` — caps the per-particle intermediate at
-        # (l_band_size, Nr+1) instead of (L_max_out**2, Nr+1).
+        # Chunk size for the (l,m) integration loop
         self.l_band_size = int(l_band_size)
 
-        # Chunk size for the streamed sparse-a_u_j scatter-add. The dense
-        # `(N_unique, Nj)` matrix scales as m22**5 and is ~99% zeros at
-        # high m22; we never build it. Instead we stream `sparse_k_batch`
-        # k-modes per scan iteration. Lower = less memory but more scan
-        # iterations; higher = fewer iterations but larger per-batch peak.
+        # Chunk size for the streamed sparse-a_u_j
         self.sparse_k_batch = int(sparse_k_batch)
 
-        # Chunk size for streaming the SHT round-trip over the radial
-        # axis. Caps the in-flight transient at (r_chunk, L_out, 2L_out-1)
-        # complex per chunk instead of the full (Nr, ...) tensor. At m22=10
-        # with c64 and Nr=1000, r_chunk=64 gives ~240 MB per chunk vs
-        # 3.7 GB without chunking — plus s2fft's internal working set.
+        # Chunk size for streaming the SHT round-trip over the radial axis. 
         self.r_chunk_size = int(r_chunk_size)
 
-        # Shard the big (Nr, Nj) and (N_unique, Nj) arrays across all visible
-        # CUDA devices when more than one is present.
+        # Shard the big (Nr, Nj) and (N_unique, Nj) arrays across all GPU's
         self.use_multi_gpu = bool(use_multi_gpu)
         self.sharding = SM.ShardingManager(self.use_multi_gpu)
 
@@ -195,33 +108,11 @@ class StellarSimTDep:
                     f"number of devices ({n_dev}): shard_map splits the SHT "
                     f"chunk along the r axis."
                 )
+            
+        # Fraction of L modes to actually take
+        self.L_out_frac = L_out_frac
 
-        self.m22 = m22
-        self.u = jsp.set_schroedinger_units(self.m22)
-
-        self.no_of_particles = no_of_particles
-
-        # List of Simulation_Particle instances — populated in initialising_simulation()
-        self.particles = []
-
-        self.r_half = r_half
-        self.r_half_width = r_half_width
-        self.no_time_steps = no_time_steps
-        self.total_evolve_time = total_evolve_time
-        self.dt = (self.total_evolve_time * self.u.from_Gyr) / self.no_time_steps
-
-        self.r_min = r_min
-        self.r_max_enclosing_frac = r_max_enclosing_frac
-
-        self.no_radius_bins = no_radius_bins
-
-        self.G = GN.value * (self.u.from_cm**3) / (self.u.from_g * self.u.from_s**2)
-
-
-        self.current_phase = None
-        self.R_j_r_phased = None
-        self.eigen_energies = None
-        self.lm_pairs_np = None
+        sel
 
 
     def initialising_simulation(self):
@@ -475,20 +366,10 @@ class StellarSimTDep:
         # the returned aj — the value is identical.
         self.aj = jnp.asarray(aj)
 
-        # ------------------------------------------------------------------
-        # SphHT path: pre-sort the k-modes by their (l,m) bin, on the host.
-        #
-        # `sparse_a_u_j_matmul` needs the modes grouped by bin. That grouping
-        # used to be recovered inside the jit with `jnp.argsort(lm_idx)`.
-        # Since `lm_idx` arrives as a closed-over constant, XLA constant-folded
-        # the sort at compile time — a 58.9M-element host sort at m22=50, which
-        # cost >1h of compile per trace and stalled the other ranks at the
-        # collective rendezvous. It is a fixed permutation, so it belongs here.
-        #
-        # `self.aj` / `self.parent_j` stay in their original k-order because the
-        # Gaunt path (`construct_rho_lms_gaunt`, `build_sparse_au_j`) pairs them
-        # positionally with `lm_idx_sorted_per_mode` / `lm_l_per_mode`.
-        # The SphHT path uses the `_sorted` copies below instead.
+        # SphHT path: pre-sort the k-modes by (l,m) bin on the host. See the
+        # matching block in `Analytic_t_dep_sim_mem_saver.py` — this sort used
+        # to happen inside the jit on a closed-over constant, and XLA
+        # constant-folded it (>1h of compile time at m22=50).
         if self.SphHT:
             self.bin_blocks = MSS.precompute_bin_blocks(
                 lm_idx_per_mode, self.N_unique_sphht, self.sparse_k_batch)
@@ -544,7 +425,7 @@ class StellarSimTDep:
         
             sim.integrator = "ias15"
             sim.force_is_velocity_dependent = False
-            sim.ri_ias15.epsilon = 1e-5
+            sim.integrator.ri_ias15.epsilon = 1e-5
         
         elif self.integrator == 'leapfrog':
 
@@ -675,7 +556,7 @@ class StellarSimTDep:
 
 
             print(f"Min T_orb: {min_orbital_P * self.u.to_Myr:.3f} Myr")
-            print(f"Min T_nl: {min_psi_t * self.u.to_Myr:.3f} Myr")
+            print(f"T_c: {min_psi_t * self.u.to_Myr:.3f} Myr")
 
             new_dt_orb = min_orbital_P / self.dt_override
 
@@ -689,7 +570,7 @@ class StellarSimTDep:
 
             self.no_time_steps = int(self.total_evolve_time * self.u.from_Gyr / new_dt)
 
-            print(f"dt: {self.dt * self.u.to_Gyr:.8f} Gyr")
+            print(f"dt: {self.dt * self.u.to_Gyr:.3f} Gyr")
             print(f"Number of time steps: {self.no_time_steps}")
 
         return aj
@@ -849,12 +730,8 @@ class StellarSimTDep:
 
     def _sort_modes_for_sphht(self, aj):
         """Permute `(aj, parent_j)` into bin-sorted order and tail-pad by
-        `k_block`.
-
-        The pad lets `sparse_a_u_j_matmul` use a fixed-width
-        `lax.dynamic_slice` for the final block without clamping its start
-        index. Padded amplitudes are zero, so the (arbitrary) column of `R`
-        their `parent_j` gathers contributes nothing.
+        `k_block`, so `sparse_a_u_j_matmul` can take fixed-width slices.
+        Padded amplitudes are zero, so the column of `R` they gather is inert.
         """
         perm = self.bin_blocks.perm
         K = self.bin_blocks.k_block
@@ -873,9 +750,9 @@ class StellarSimTDep:
         Inverse SHT to get psi on the dense grid, then square.
 
         Delegates to the module-level JIT'd helper using the SPARSE a_u_j
-        representation — `(self.aj, self.parent_j, self.lm_idx_per_mode)` —
-        so the `(N_unique, Nj)` dense matrix is never materialised. The
-        scatter-add streams k-modes in batches of `self.sparse_k_batch`.
+        representation — `(self.aj_sorted, self.parent_j_sorted, self.bin_blocks)`
+        — so the `(N_unique, Nj)` dense matrix is never materialised. The
+        segment-sum streams k-modes in bin-aligned blocks of `self.sparse_k_batch`.
         '''
         return MSS.build_sphht_rho_rtp_jit(
             R_j_r_fixed, phase_c,
@@ -910,12 +787,10 @@ class StellarSimTDep:
         """SphHT path: rho_lm per particle via s2fft round-trip, using the
         sparse a_u_j representation (no dense `(N_unique, Nj)` matrix).
 
-        `sparse_au_j` is `(aj_sorted, parent_j_sorted, blocks)` and is passed
-        in explicitly rather than read off `self`. This method is inlined into
-        `jax.jit(self.calc_rho_lm_at_parts_and_call_insert)`, a *bound-method*
-        jit, so anything reached through `self` enters the jaxpr as a literal
-        constant — here ~1 GB of them, which XLA then tries to fold through.
-        As traced arguments they stay device buffers.
+        `sparse_au_j` is `(aj_sorted, parent_j_sorted, blocks)`, passed in
+        explicitly rather than read off `self`: this method is inlined into a
+        *bound-method* jit, so anything reached through `self` becomes a
+        literal constant in the jaxpr instead of a device buffer.
         """
         aj_sorted, parent_j_sorted, blocks = sparse_au_j
         return MSS.compute_rho_lm_at_particles_sphht_jit(
@@ -1061,8 +936,7 @@ class StellarSimTDep:
         #print('computing rho_lm at particle positions...')
         if self.SphHT:
             # `a_u_j` arg is ignored on this path; the sparse triplet arrives
-            # as `sparse_au_j` (traced, not closed over — see
-            # `compute_rho_lm_at_particles_sphht`).
+            # as `sparse_au_j` (traced, not closed over).
             rho_lm_at_particles_full = self.compute_rho_lm_at_particles_sphht(
                 R_j_at_particles, phase_c, sparse_au_j)
 
@@ -1351,9 +1225,7 @@ class StellarSimTDep:
         end = time()
         self.aj = aj
 
-        # Keep the bin-sorted SphHT copy in step with `self.aj`. The value is
-        # identical to the one built in `initialising_simulation`, but rebuild
-        # rather than rely on that.
+        # Keep the bin-sorted SphHT copy in step with `self.aj`.
         if self.SphHT:
             self.aj_sorted, self.parent_j_sorted = self._sort_modes_for_sphht(self.aj)
 

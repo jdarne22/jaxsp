@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import rebound
 import s2fft
 from scipy.special import sph_harm_y
-from collections import defaultdict
+from typing import NamedTuple
 
 import sys
 sys.path.append('/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses')
@@ -38,29 +38,48 @@ importlib.reload(gf)
 
 def precompute_lm_pairs(l):
     '''Precompute (l, m) bookkeeping for spherical harmonics.
+
+    Vectorized over numpy. For large eigenbases (l_max ~ 1e3, total
+    k-modes sum(2l+1) ~ 1e9) the original pure-Python loop + dict boxed
+    every (l, m, j) triple as a separate Python int/tuple object, which
+    blew past 256GB of host RAM and took ~1hr before OOM-killing the job.
+    This does the same bookkeeping with bulk array ops in seconds and a
+    few GB.
     '''
+    l = np.asarray(l)
+    n_j = l.shape[0]
+    n_per_j = (2 * l + 1).astype(np.int64)
+    total_k = int(n_per_j.sum())
 
-    l_for_kmode = []   
-    m_for_kmode = []      
-    ind_for_jmode_over_all_k = []  
-    lm_pairs_dict = defaultdict(int)
+    # j-index and l for every k-mode (each j contributes 2l+1 k-modes,
+    # m = -l..l).
+    ind_for_jmode_over_all_k = np.repeat(np.arange(n_j, dtype=np.int32), n_per_j)
+    l_for_kmode = np.repeat(l, n_per_j).astype(np.int32)
 
-    for j_idx, ell in enumerate(l.tolist()):
-        for m in range(-ell, ell + 1):
-            l_for_kmode.append(ell)
-            m_for_kmode.append(m)
-            ind_for_jmode_over_all_k.append(j_idx)
-            lm_pairs_dict[(ell, m)] += 1
+    block_start = np.cumsum(n_per_j) - n_per_j
+    within_block = np.arange(total_k, dtype=np.int64) - np.repeat(block_start, n_per_j)
+    m_for_kmode = (within_block - l_for_kmode).astype(np.int32)
 
-    lm_pairs_list = list(lm_pairs_dict.keys())      
-    lm_pairs = jnp.array(lm_pairs_list)  
+    # Unique (l, m) pairs only depend on which l values occur (<= l_max+1
+    # of them), not on how many j's share each l, so build them directly
+    # instead of de-duplicating the full total_k-length k-mode table.
+    unique_l = np.unique(l).astype(np.int64)
+    n_per_unique_l = 2 * unique_l + 1
+    pair_block_start = np.cumsum(n_per_unique_l) - n_per_unique_l
+    lm_pairs_l = np.repeat(unique_l, n_per_unique_l)
+    within_pair_block = np.arange(lm_pairs_l.shape[0], dtype=np.int64) - np.repeat(pair_block_start, n_per_unique_l)
+    lm_pairs_m = within_pair_block - lm_pairs_l
+    lm_pairs_np = np.stack([lm_pairs_l, lm_pairs_m], axis=1).astype(np.int32)
 
-    lm_pair_to_idx = {pair: i for i, pair in enumerate(lm_pairs_list)} # {(l, m): idx in unique lm pairs}
+    # Index into lm_pairs_np for every k-mode: that l's block start, plus
+    # position within the block (m - (-l) = m + l).
+    l_to_block_start = np.zeros(int(unique_l.max()) + 1, dtype=np.int64)
+    l_to_block_start[unique_l] = pair_block_start
+    lm_pairs_idx_for_kmode = (
+        l_to_block_start[l_for_kmode] + (m_for_kmode.astype(np.int64) + l_for_kmode)
+    ).astype(np.int32)
 
-    lm_pairs_idx_for_kmode = jnp.array(
-        [lm_pair_to_idx[(ell, m)] for ell, m in zip(l_for_kmode, m_for_kmode)], dtype=jnp.int32) # way of going from each lm for k to its index in lm pairs
-
-    L = int(max(l)) + 1
+    L = int(l.max()) + 1
     L_max_out = 2 * L - 1
     n_theta = L_max_out
     n_phi = 2 * L_max_out - 1
@@ -70,72 +89,223 @@ def precompute_lm_pairs(l):
     j = np.arange(n_phi)
     phi_np = (2 * np.pi * j) / (2 * L_max_out - 1)
 
-    return (jnp.array(ind_for_jmode_over_all_k), lm_pairs,
-            jnp.array(l_for_kmode), jnp.array(m_for_kmode),
+    return (jnp.asarray(ind_for_jmode_over_all_k), jnp.asarray(lm_pairs_np),
+            jnp.asarray(l_for_kmode), jnp.asarray(m_for_kmode),
             jnp.asarray(theta_np), jnp.asarray(phi_np),
-            lm_pairs_idx_for_kmode)
+            jnp.asarray(lm_pairs_idx_for_kmode))
 
 
-def sparse_a_u_j_matmul(aj, parent_j, lm_idx, phase_c, R, N_unique, k_batch):
+class BinBlocks(NamedTuple):
+    """Setup-time bin-packing plan for `sparse_a_u_j_matmul`.
+
+    `perm` sorts the k-modes by their (l,m) bin. The remaining arrays
+    describe a partition of the *sorted* mode axis into `n_blocks`
+    contiguous slices, each holding at most `k_block` modes and, crucially,
+    only *whole* (l,m) bins — no bin ever straddles a block boundary.
+
+    perm       : (Nmodes_k,) int64  — argsort(lm_idx), applied at setup
+    block_start: (n_blocks,)  int32 — first sorted-mode index of each block
+    bin_lo/hi  : (n_blocks, B) int32 — bin bounds *local* to the block, as
+                 offsets into the block's prepended-zero cumsum
+    bin_id     : (n_blocks, B) int32 — destination row in `S`; padding
+                 entries point at the dead row `N_unique` with lo == hi == 0
+    k_block    : int — static block width (== `sparse_k_batch`)
+    """
+    perm: np.ndarray
+    block_start: jnp.ndarray
+    bin_lo: jnp.ndarray
+    bin_hi: jnp.ndarray
+    bin_id: jnp.ndarray
+    k_block: int
+
+    def as_arrays(self):
+        """The four device arrays, in the order `sparse_a_u_j_matmul` wants."""
+        return (self.block_start, self.bin_lo, self.bin_hi, self.bin_id)
+
+
+def precompute_bin_blocks(lm_idx, N_unique, k_block, max_bins_per_block=4096):
+    """Build the `BinBlocks` plan. Pure numpy — runs once, at setup.
+
+    Everything here used to happen *inside* the jit as `jnp.argsort(lm_idx)`
+    and `jnp.bincount(lm_idx)`. Because `lm_idx` reaches the trace as a
+    closed-over constant (`self.lm_idx_per_mode` under a bound-method jit),
+    XLA constant-folded the sort on the host: a single-threaded stable sort
+    of 58.9M elements at m22=50, which took over an hour of compile time
+    while the other ranks sat in the collective rendezvous. Hoisting it here
+    costs one numpy argsort at startup and removes the op from the graph.
+
+    Blocks are packed greedily and aligned to bin boundaries, so each (l,m)
+    bin is written exactly once across the whole scan. That preserves the
+    bit-reproducibility the cumsum approach was chosen for, without needing
+    a cumsum over the full `Nmodes_k` axis.
+    """
+    lm_idx = np.asarray(lm_idx)
+    Nmodes = lm_idx.shape[0]
+
+    perm = np.argsort(lm_idx, kind='stable')
+    counts = np.bincount(lm_idx[perm], minlength=N_unique)
+    if counts.max() > k_block:
+        raise ValueError(
+            f"k_block={k_block} is smaller than the largest (l,m) bin "
+            f"({counts.max()} modes). Blocks must hold whole bins; raise "
+            f"`sparse_k_batch` to at least {int(counts.max())}.")
+
+    starts = np.concatenate([[0], np.cumsum(counts)]).astype(np.int64)  # (N_unique+1,)
+
+    # Greedy pack: extend the block while it holds whole bins, stays within
+    # `k_block` modes, and stays within `max_bins_per_block` bins.
+    spans = []
+    u0 = 0
+    while u0 < N_unique:
+        u1 = u0
+        base = starts[u0]
+        while (u1 < N_unique
+               and starts[u1 + 1] - base <= k_block
+               and u1 - u0 < max_bins_per_block):
+            u1 += 1
+        assert u1 > u0, "empty block — bin larger than k_block slipped through"
+        spans.append((u0, u1))
+        u0 = u1
+
+    n_blocks = len(spans)
+    B = max(u1 - u0 for u0, u1 in spans)
+
+    block_start = np.zeros(n_blocks, np.int32)
+    bin_lo = np.zeros((n_blocks, B), np.int32)
+    bin_hi = np.zeros((n_blocks, B), np.int32)
+    bin_id = np.full((n_blocks, B), N_unique, np.int32)   # dead row for padding
+
+    for i, (u0, u1) in enumerate(spans):
+        st = starts[u0]
+        nb = u1 - u0
+        block_start[i] = st
+        bin_lo[i, :nb] = starts[u0:u1] - st
+        bin_hi[i, :nb] = starts[u0 + 1:u1 + 1] - st
+        bin_id[i, :nb] = np.arange(u0, u1)
+
+    print(f"[sparse_a_u_j] {Nmodes} k-modes → {n_blocks} blocks of ≤{k_block} "
+          f"modes / ≤{B} bins. Peak transient per block: M × {k_block}.")
+
+    return BinBlocks(
+        perm=perm,
+        block_start=jnp.asarray(block_start),
+        bin_lo=jnp.asarray(bin_lo),
+        bin_hi=jnp.asarray(bin_hi),
+        bin_id=jnp.asarray(bin_id),
+        k_block=int(k_block),
+    )
+
+
+def fold_phase_into_aj(aj_sorted, parent_j_sorted, phase_c, R_dtype):
+    """Compute `sparse_a_u_j_matmul`'s `aj_phase` once, for callers that invoke
+    it repeatedly with the same `(aj, parent_j, phase_c)` but different `R`.
+
+    `aj_phase` is loop-invariant across an r-chunk loop: it depends only on the
+    amplitudes, the per-j phase, and `cdtype` — never on `R`'s *values*, only on
+    its dtype. Recomputing it per chunk costs a random gather over all Nmodes_k
+    (201M elements / ~2.4 GB of traffic at m22=50) for nothing, and XLA will not
+    reliably hoist an intermediate that large out of a `lax.scan` body.
+
+    `cdtype` is derived from exactly the same three dtypes as the in-function
+    path, so passing the result back into `sparse_a_u_j_matmul(..., aj_phase=…)`
+    is bit-for-bit identical to letting it recompute.
+    """
+    cdtype = jnp.result_type(aj_sorted.dtype, phase_c.dtype, R_dtype)
+    return (aj_sorted * phase_c[parent_j_sorted]).astype(cdtype)
+
+
+def sparse_a_u_j_matmul(aj_sorted, parent_j_sorted, blocks, phase_c, R,
+                        N_unique, k_batch, aj_phase=None):
     """Sparse equivalent of `(a_u_j_dense @ (R * phase[None, :]).T)`.
 
     The dense `a_u_j` is a one-hot scatter: each k-mode (n, l, m) writes
     `aj[k]` to row `lm_idx[k]`, column `parent_j[k]`. So `a_u_j` has
     `Nmodes_k = sum_j (2 l_j + 1)` nonzeros in `N_unique * Nj ≈ m22**5`
-    slots — typically <1% dense. We never materialise it; instead we
-    stream over k-modes in batches of `k_batch`, gathering the needed
-    columns of `R` and scatter-adding into the output `S`.
-
-    Memory: `O(M * k_batch)` per batch instead of `O(N_unique * Nj)` for
-    the dense matrix. At m22=10 this swaps a 13 GB standing array for a
-    ~100 MB per-batch transient.
+    slots — typically <1% dense. We never materialise it.
 
     Inputs
     ------
-    aj         : (Nmodes_k,) complex amplitudes per k-mode
-    parent_j   : (Nmodes_k,) int — j-index per k-mode
-    lm_idx     : (Nmodes_k,) int — unique-(l,m) index per k-mode
-    phase_c    : (Nj,) complex — e^{-i E_j t}, already cast to cdtype
-    R          : (M, Nj) — `R_j_r_fixed` (M = Nr) or `R_j_at_parts` (M = Np)
-    N_unique   : int (static) — number of distinct (l,m) pairs
-    k_batch    : int (static) — k-modes per scan iteration
+    aj_sorted       : (Nmodes_k + k_batch,) complex — amplitudes per k-mode,
+                      permuted by `blocks.perm` and zero-padded by `k_batch`
+    parent_j_sorted : (Nmodes_k + k_batch,) int — j-index per k-mode, same
+                      permutation, zero-padded (padded amplitudes are 0, so
+                      the column they gather is irrelevant)
+    blocks          : 4-tuple `(block_start, bin_lo, bin_hi, bin_id)` from
+                      `precompute_bin_blocks(...).as_arrays()`
+    phase_c         : (Nj,) complex — e^{-i E_j t}, already cast to cdtype
+    R               : (M, Nj) — `R_j_r_fixed` (M = Nr) or `R_j_at_parts` (M = Np)
+    N_unique        : int (static) — number of distinct (l,m) pairs
+    k_batch         : int (static) — block width; must equal `blocks.k_block`
 
     Output: `S` of shape (N_unique, M), equal to
             Σ_k δ(u, lm_idx[k]) · aj[k] · phase[parent_j[k]] · R[:, parent_j[k]]
     """
-    Nmodes_k = aj.shape[0]
-    n_chunks = (Nmodes_k + k_batch - 1) // k_batch
-    pad_to = n_chunks * k_batch
-    pad_n = pad_to - Nmodes_k
-
-    if pad_n > 0:
-        # Dummy entries have aj=0 so their scatter-add contribution is 0.
-        aj = jnp.concatenate([aj, jnp.zeros((pad_n,), dtype=aj.dtype)])
-        parent_j = jnp.concatenate([parent_j, jnp.zeros((pad_n,), dtype=parent_j.dtype)])
-        lm_idx = jnp.concatenate([lm_idx, jnp.zeros((pad_n,), dtype=lm_idx.dtype)])
-
-    aj_chunks = aj.reshape(n_chunks, k_batch)
-    pj_chunks = parent_j.reshape(n_chunks, k_batch)
-    u_chunks  = lm_idx.reshape(n_chunks, k_batch)
+    # Deterministic segment-sum over the (l,m) bins, replacing the original
+    # atomic scatter-add (`S.at[u_b, :].add(...)` inside a k-batched scan).
+    #
+    # Why not atomics: the scatter-add accumulates many radial modes into each
+    # (l,m) bin via GPU atomics, whose ordering is not reproducible across
+    # kernel launches. At complex64 that seeds ~1e-5 run-to-run noise, which
+    # the chaotic stellar dynamics amplify to O(1) by late times (worse at
+    # high m22, where there are more modes per bin and the orbits are more
+    # chaotic). `jax.ops.segment_sum` does NOT fix this — even with
+    # `indices_are_sorted=True` it still lowers to atomics, and on this jaxlib
+    # it segfaults for complex inputs.
+    #
+    # Instead: with modes pre-sorted by bin (done at setup, see
+    # `precompute_bin_blocks`), scan over bin-aligned blocks of `k_batch`
+    # modes. Per block, take a prefix sum — fixed reduction order, hence
+    # bit-reproducible — and difference it at the bin boundaries. Because
+    # blocks never split a bin, every bin is written exactly once, so the
+    # `.at[].add()` below never has two live contributions racing for the
+    # same row; only the dead padding row `N_unique` sees collisions, and it
+    # is discarded.
+    #
+    # Memory: peak transient is `(M, k_batch)`, not `(M, Nmodes_k)`. The
+    # latter is 47 GB at m22=50 with 100 particles — it is what produced the
+    # `Failed to allocate 12.39GiB` in the m22=50 run.
+    #
+    # Accuracy: differencing a cumsum over ≤ k_batch terms rather than over
+    # all 58.9M is also strictly better conditioned — the old form subtracted
+    # two large prefix sums to recover a small bin sum.
+    if not isinstance(blocks, (tuple, list)) or len(blocks) != 4:
+        raise TypeError(
+            "sparse_a_u_j_matmul now takes a bin-block plan, not `lm_idx`. "
+            "Pass `precompute_bin_blocks(lm_idx, N_unique, k_batch).as_arrays()` "
+            "and permute `aj`/`parent_j` by its `.perm` (see `_sort_modes_for_sphht`).")
 
     M = R.shape[0]
-    cdtype = jnp.result_type(aj.dtype, phase_c.dtype, R.dtype)
-    S_init = jnp.zeros((N_unique, M), dtype=cdtype)
+    cdtype = jnp.result_type(aj_sorted.dtype, phase_c.dtype, R.dtype)
 
-    def body(S, batched):
-        aj_b, pj_b, u_b = batched
-        aj_phased = aj_b * phase_c[pj_b]                  # (k_batch,)
-        R_cols    = R[:, pj_b]                            # (M, k_batch)
-        contrib   = aj_phased[None, :] * R_cols           # (M, k_batch)
-        S = S.at[u_b, :].add(contrib.T)                   # scatter-add along u-axis
-        return S, None
+    # Fold the per-j phase into the amplitudes once, outside the scan. Callers
+    # that loop over r-chunks should hoist this further still, via
+    # `fold_phase_into_aj`, and pass the result in — it does not vary with `R`.
+    if aj_phase is None:
+        aj_phase = fold_phase_into_aj(aj_sorted, parent_j_sorted, phase_c, R.dtype)
 
-    S, _ = jax.lax.scan(body, S_init, (aj_chunks, pj_chunks, u_chunks))
-    return S
+    zeros_col = jnp.zeros((M, 1), cdtype)
+
+    def block_body(S, blk):
+        st, lo, hi, bid = blk
+        a_b = jax.lax.dynamic_slice(aj_phase, (st,), (k_batch,))        # (k_batch,)
+        p_b = jax.lax.dynamic_slice(parent_j_sorted, (st,), (k_batch,))  # (k_batch,)
+
+        # contrib[:, k] = aj[k] * phase[parent_j[k]] * R[:, parent_j[k]]
+        contrib = a_b[None, :] * R[:, p_b]                               # (M, k_batch)
+
+        cs = jnp.cumsum(contrib, axis=1)
+        cs = jnp.concatenate([zeros_col, cs], axis=1)                    # (M, k_batch+1)
+        sums = cs[:, hi] - cs[:, lo]                                     # (M, B)
+
+        return S.at[bid, :].add(sums.T), None
+
+    S0 = jnp.zeros((N_unique + 1, M), cdtype)                            # +1 = dead row
+    S, _ = jax.lax.scan(block_body, S0, blocks)
+    return S[:N_unique]
 
 
 @functools.partial(jax.jit, static_argnames=("L_out", "N_unique", "k_batch", "r_chunk"))
-def build_sphht_rho_rtp_jit(R_j_r_fixed, phase_c, aj, parent_j, lm_idx,
+def build_sphht_rho_rtp_jit(R_j_r_fixed, phase_c, aj, parent_j, blocks,
                               lm_pairs, total_mass, L_out, N_unique, k_batch, r_chunk):
     """JIT'd: sparse-matmul → scatter → inverse-SHT → rho_rtp, streamed
     over chunks of `r_chunk` radial bins.
@@ -162,10 +332,13 @@ def build_sphht_rho_rtp_jit(R_j_r_fixed, phase_c, aj, parent_j, lm_idx,
 
     R_chunks = R_padded.reshape(n_chunks, r_chunk, Nj)
 
+    # Loop-invariant: hoist out of the per-chunk map (see `fold_phase_into_aj`).
+    aj_phase = fold_phase_into_aj(aj, parent_j, phase_c, rdtype)
+
     def chunk_body(R_chunk):
         # R_chunk: (r_chunk, Nj)
-        S_chunk = sparse_a_u_j_matmul(aj, parent_j, lm_idx, phase_c, R_chunk,
-                                         N_unique, k_batch)                # (N_unique, r_chunk)
+        S_chunk = sparse_a_u_j_matmul(aj, parent_j, blocks, phase_c, R_chunk,
+                                         N_unique, k_batch, aj_phase=aj_phase)  # (N_unique, r_chunk)
 
         flm_chunk = jnp.zeros((r_chunk, L_out, 2 * L_out - 1), dtype=cdtype)
         flm_chunk = flm_chunk.at[:, lm_pairs[:, 0], (L_out - 1) + lm_pairs[:, 1]].set(S_chunk.T)
@@ -183,7 +356,7 @@ def build_sphht_rho_rtp_jit(R_j_r_fixed, phase_c, aj, parent_j, lm_idx,
 
 
 @functools.partial(jax.jit, static_argnames=("L_out", "N_unique", "k_batch", "r_chunk", "out_sharding"))
-def build_sphht_rho_lms_jit(R_j_r_fixed, phase_c, aj, parent_j, lm_idx,
+def build_sphht_rho_lms_jit(R_j_r_fixed, phase_c, aj, parent_j, blocks,
                               lm_pairs, total_mass,
                               ramp_c, rho_static_r_l00,
                               L_out, N_unique, k_batch, r_chunk,
@@ -241,9 +414,13 @@ def build_sphht_rho_lms_jit(R_j_r_fixed, phase_c, aj, parent_j, lm_idx,
             lambda r: s2fft.forward(r, L_out, sampling='mw', method='jax')
         )(rho).astype(cdtype)
 
+    # Loop-invariant: hoist out of the per-chunk scan (see `fold_phase_into_aj`).
+    # At m22=50 this was a 201M-element gather redone once per chunk.
+    aj_phase = fold_phase_into_aj(aj, parent_j, phase_c, rdtype)
+
     def chunk_body(R_chunk):
-        S_chunk = sparse_a_u_j_matmul(aj, parent_j, lm_idx, phase_c, R_chunk,
-                                         N_unique, k_batch)                 # (N_unique, r_chunk)
+        S_chunk = sparse_a_u_j_matmul(aj, parent_j, blocks, phase_c, R_chunk,
+                                         N_unique, k_batch, aj_phase=aj_phase)  # (N_unique, r_chunk)
         S_T = S_chunk.T                                                      # (r_chunk, N_unique)
 
         if out_sharding is not None:
@@ -356,7 +533,7 @@ def compute_Ylm_and_dtheta_jit(lm_pairs, theta_arr, phi_arr, n_max):
 
 @functools.partial(jax.jit, static_argnames=("L_out", "N_unique", "k_batch"))
 def compute_rho_lm_at_particles_sphht_jit(R_j_at_parts, phase_c, aj, parent_j,
-                                            lm_idx, lm_pairs, total_mass,
+                                            blocks, lm_pairs, total_mass,
                                             L_out, N_unique, k_batch):
     """JIT'd per-particle rho_lm via sparse a_u_j × R_j_at_parts.
 
@@ -366,7 +543,7 @@ def compute_rho_lm_at_particles_sphht_jit(R_j_at_parts, phase_c, aj, parent_j,
     cdtype = jnp.result_type(aj.dtype, phase_c.dtype, R_j_at_parts.dtype)
 
     # (N_unique, Np) — same kernel, just M = N_particles.
-    S_up = sparse_a_u_j_matmul(aj, parent_j, lm_idx, phase_c, R_j_at_parts,
+    S_up = sparse_a_u_j_matmul(aj, parent_j, blocks, phase_c, R_j_at_parts,
                                   N_unique, k_batch)
     S_pu = S_up.T                                                          # (Np, N_unique)
 

@@ -20,12 +20,13 @@ import numpy as np
 import jax.numpy as jnp
 from jaxsp.constants import GN
 
-import gaunt_funcs as gf
+
 import Stellar_sim_funcs as SSF
 
 import Poisson_solver as PS
 import Sharding_manager as SM
 import Memory_speed_savers as MSS
+import gaunt_funcs as gf
 
 
 
@@ -133,13 +134,31 @@ class Simulation_Particle:
 class StellarSimTDep:
 
     '''
-    Stellar simulation which controls how everything is done and calls the particle
-    class to update particle states.
+    Test version of the stellar simulation. Same memory-saving infrastructure
+    (sharding, sparse a_u_j, fused JIT'd SHT round-trip, streamed insertion) as the
+    production sim, but with two orthogonal mode flags layered on top:
+
+      - `frozen` : if True, the ULDM phase is held fixed at t = 0 for every
+                   macro timestep, so rho_lm does not evolve in time. If False
+                   (default), the phase evolves with time_step (standard
+                   time-dependent ULDM, identical to the production sim).
+      - `static` : applied AFTER rho_lm is built (both on the radial grid
+                   and per particle). Zeros every (l, m) slot except
+                   (l=0, m=0), so the field the particles see is
+                   spherically symmetric. Combinable with `frozen`.
+
+    The four corners of (static, frozen):
+      - (False, False) : full time-dependent ULDM (production sim).
+      - (False, True)  : full rho_lm but frozen in time.
+      - (True,  False) : only (l=0, m=0) survives; that monopole oscillates
+                         in time as the phase evolves.
+      - (True,  True)  : only (l=0, m=0) survives; monopole frozen in time.
     '''
 
     def __init__(self, m22, r_half, r_half_width, no_of_particles, no_time_steps, total_evolve_time, r_min, r_max_enclosing_frac,
-                 no_radius_bins, SphHT, integrator, plot, dt_override, ramp_time, sparse_k_batch, r_chunk_size, l_band_size,
-                 compute_dtype, use_multi_gpu=True, L_out_frac=1.0):
+                 no_radius_bins, SphHT, integrator, plot, dt_override, sparse_k_batch, r_chunk_size, l_band_size,
+                 compute_dtype, frozen=False, static=False,
+                 use_multi_gpu=True, L_out_frac=1.0):
 
         self.stellar_v_disp = []
         self.average_r = []
@@ -147,8 +166,9 @@ class StellarSimTDep:
         self.SphHT = SphHT
         self.integrator = integrator
         self.plot = plot
+        self.frozen = frozen
+        self.static = static
         self.dt_override = dt_override
-        self.ramp_time = ramp_time
         self.L_out_frac = L_out_frac
 
         # ---------- Memory-saving knobs ----------
@@ -335,7 +355,6 @@ class StellarSimTDep:
             with open(pkl_fname, 'wb') as f:
                 pickle.dump({'eigenstate_lib': eigenstate_lib, 'wavefunction_params': wavefunction_params}, f)
 
-                
         self.l = l
 
         print('l max from jaxsp:', max(l))
@@ -353,7 +372,6 @@ class StellarSimTDep:
         # silently drop eigenmode contributions, not just truncate rho.
         L_max_out_full = 2 * L - 1
         if self.SphHT and self.L_out_frac < 1.0:
-            #L_sht = max(int(round(self.L_out_frac * L_max_out_full)), L)
             L_sht = int(round(self.L_out_frac * L_max_out_full))
             self.L_max_out = L_sht
             print(f"SphHT bandwidth truncated by L_out_frac={self.L_out_frac}: "
@@ -367,7 +385,7 @@ class StellarSimTDep:
         if self.sharding.shard_l is not None:
             n_dev = len(self.sharding.devices)
             if self.L_max_out % n_dev != 0:
-                L_aligned = (self.L_max_out // n_dev) * n_dev
+                L_aligned = max((self.L_max_out // n_dev) * n_dev, L)
                 print(f"L_max_out {self.L_max_out} not divisible by {n_dev} devices; "
                       f"rounding down to {L_aligned} for L-sharding.")
                 self.L_max_out = L_aligned
@@ -496,18 +514,33 @@ class StellarSimTDep:
 
         # Constructing initial conditions based on Andrew paper
 
-        # The static background is the time-averaged (diagonal) density 
+        # rho_diag is the time-averaged smooth profile the halo is built to
+        # reproduce (arXiv:2510.17079 Eq. 8, arXiv:2604.26393 §III) — the
+        # stationary background the production sim uses as the IC v_circ
+        # source.
         rho_diag = self.compute_diagonal_rho_expansion()
 
-        # (l=0, m=0) coefficient of the same diagonal density — the ramp
-        # baseline consumed by Build_rho_lms_for_timestep. Y00 = 1/sqrt(4π)
-        # so the coefficient is rho_diag · sqrt(4π).
-        self.rho_static_r_l00 = (
-            rho_diag * jnp.sqrt(4.0 * jnp.pi)).astype(self.compute_dtype)
+        # v_circ baseline: pick the spherical density that matches the field
+        # the particle actually feels at t = 0.
+        #
+        # - frozen=False: the monopole oscillates around the time-averaged
+        #   diagonal density. Using rho_diag puts the orbit at the
+        #   equilibrium circular radius so the fluctuations show up as
+        #   zero-mean drift / heating (production-sim convention).
+        # - frozen=True: there is no time-averaged equilibrium to perturb
+        #   from — the potential is just |ψ(t=0)|². Use the t=0
+        #   instantaneous monopole so v_circ matches the actual frozen
+        #   field. With static=True this gives a perfectly circular orbit;
+        #   without static it gives the orbit circular in the spherical
+        #   projection of the frozen field.
+        if self.frozen:
+            rho_for_v_circ = self.compute_t0_instantaneous_monopole()
+        else:
+            rho_for_v_circ = rho_diag
 
         # Cumulative enclosed mass M_enc(r) on the radial grid; interpolated
         # per particle below. SSF.Enclosed_mass applies the 4π r² factor.
-        M_enc_arr = SSF.Enclosed_mass(self.r, rho_diag)
+        M_enc_arr = SSF.Enclosed_mass(self.r, rho_for_v_circ)
 
         # M_enc_tot = M_enc_arr[-1]
 
@@ -689,30 +722,85 @@ class StellarSimTDep:
 
             self.no_time_steps = int(self.total_evolve_time * self.u.from_Gyr / new_dt)
 
-            print(f"dt: {self.dt * self.u.to_Gyr:.8f} Gyr")
+            print(f"dt: {self.dt * self.u.to_Gyr:.3f} Gyr")
             print(f"Number of time steps: {self.no_time_steps}")
 
         return aj
 
 
-    def ramp_frac_for_step(self, time_step):
+    def get_phase_for_step(self, time_step):
+        """Per-step ULDM phase.
 
-        """Scalar in [0, 1] giving the fraction of the off-diagonal (j != j') 
-        cross-terms switched on.
-        Linear from ~0 to 1 over n_ramp_steps
+        - frozen=True  : phase fixed at t = 0 (initial-time snapshot, i.e.
+                         exp(-i E t) = 1; only the random aj phases remain).
+        - frozen=False : phase evolves with `time_step` (standard
+                         time-dependent ULDM, matches the production sim).
+
+        Stays in float64/complex128 — `eigen_energies * t` accumulates over a
+        long sim and small phase errors compound.
         """
+        t_phase = 0.0 if self.frozen else time_step * self.dt
+        return jnp.exp(-1j * self.eigen_energies * t_phase)
 
-        if time_step < self.n_ramp_steps:
-            return (time_step + 1) / self.n_ramp_steps
-        else:
-            return 1.0
+
+    def _apply_static_mask(self, rho_lm):
+        """Zero every (l, m) slot except (l=0, m=0). Works on the trailing two
+        (L, 2L-1) axes; broadcasts over any leading batch axes (Nr or N_particles).
+
+        Applied to the instantaneous rho_lm, so the result is the monopole of
+        the chosen phase — NOT the time-averaged diagonal density.
+        """
+        L_out = self.L_max_out
+        out = jnp.zeros_like(rho_lm)
+        return out.at[..., 0, L_out - 1].set(rho_lm[..., 0, L_out - 1])
+
+    def compute_t0_instantaneous_monopole(self):
+        """Spherically-averaged density ρ_sph(r) at t = 0.
+
+        Equals the (l=0, m=0) coefficient of |ψ(t=0)|² divided by sqrt(4π).
+        Unlike the diagonal density, this keeps the (j, j') cross-terms with
+        random initial aj phases — it is exactly what the `static` mask
+        extracts at time_step = 0 and what the particle's spherical
+        projection of the field sees at the start of the sim.
+
+        For each unique (l, m) slot u:
+            F_u(r) = Σ_{k: (l_k, m_k) = u} a_k · R_{parent_j[k]}(r)
+        Then
+            ρ_sph(r) = (total_mass / 4π) · Σ_u |F_u(r)|²
+
+        Used as the v_circ baseline when the field is frozen (no
+        time-averaging to fall back to). With `frozen=True, static=True`
+        this gives a perfectly circular orbit; with `frozen=True,
+        static=False` it gives the orbit that is circular in the spherical
+        projection of the frozen field.
+        """
+        Nr = self.R_j_r_fixed.shape[0]
+        Nk = len(self.parent_j)
+
+        # Build F[u, r] = Σ_{k: lm_idx[k]=u} a_k · R_{parent_j[k]}(r) in
+        # k-mode batches so we never materialise the full (Nr, Nk) gather
+        # (which would be ~149 GB at m22=10, Nr=1000, Nk=37M).
+        F = jnp.zeros((self.N_unique_sphht, Nr), dtype=self.compute_dtype)
+        batch = self.sparse_k_batch
+        for k0 in range(0, Nk, batch):
+            k1 = min(k0 + batch, Nk)
+            pj_b  = self.parent_j[k0:k1]            # (b,)
+            aj_b  = self.aj[k0:k1]                  # (b,) complex
+            idx_b = self.lm_idx_per_mode[k0:k1]     # (b,)
+            # (Nr, b) gather — small, fits in memory
+            aR_b = (self.R_j_r_fixed[:, pj_b].astype(self.compute_dtype)
+                    * aj_b[None, :])                 # (Nr, b)
+            F = F.at[idx_b].add(aR_b.T)             # scatter (b, Nr) -> (N_unique, Nr)
+
+        rho_sph = (self.total_mass / (4.0 * jnp.pi)) * jnp.sum(jnp.abs(F) ** 2, axis=0)
+        return rho_sph.astype(jnp.float64)
 
     def compute_diagonal_rho_expansion(self):
 
         """Time-averaged (diagonal) density ρ_static(r) — the smooth static
-        profile the halo is built to reproduce, and the background that BOTH
-        the circular-velocity ICs and the ramp baseline are built from
-        (cf. arXiv:2510.17079 Eq. 8, arXiv:2604.26393 §III).
+        profile the halo is built to reproduce, and the v_circ baseline
+        when `frozen=False` (cf. arXiv:2510.17079 Eq. 8,
+        arXiv:2604.26393 §III).
 
         Because |a_{j,m}|² is m-independent (isotropic random phases), the
         addition theorem Σ_m |Y_{lm}(θ,φ)|² = (2l+1)/4π collapses the angular
@@ -721,10 +809,7 @@ class StellarSimTDep:
             ρ_static(r) = total_mass · Σ_j  weight_j · |R_j(r)|²
             weight_j     = |a_j|² · (2l_j + 1) / (4π)
 
-        Returns the (Nr,) real density ρ_static(r). Side effect: sets
-        self.weight_j, reused by `compute_rho_lm_at_particles_diagonal_only`.
-        The (l=0, m=0) spherical-harmonic coefficient — the only nonzero slot,
-        used as the ramp baseline — is ρ_static(r)·sqrt(4π).
+        Returns the (Nr,) real density ρ_static(r).
         """
 
         Nj = self.R_j_r_fixed.shape[1]
@@ -734,26 +819,11 @@ class StellarSimTDep:
         aj_sq_j = jnp.zeros(Nj, dtype=jnp.float64).at[self.parent_j].set(aj_sq_k)  # (Nj,)
 
         weight_j = aj_sq_j * (2.0 * self.l.astype(jnp.float64) + 1.0) / (4.0 * jnp.pi)
-        self.weight_j = weight_j                                               # (Nj,) — reused by static rho_lm calls
 
         R_sq = (jnp.abs(self.R_j_r_fixed) ** 2).astype(jnp.float64)
         rho_static_r = self.total_mass * (R_sq @ weight_j)                    # (Nr,)
 
         return rho_static_r
-
-    def compute_rho_lm_at_particles_diagonal_only(self, R_j_at_particles):
-        """Time-averaged (diagonal-only) rho_lm at each particle's exact r.
-
-        Because ρ_static is spherically symmetric, only (l=0, m=0) is nonzero:
-            ρ_lm(r_p) = ρ_static(r_p) · sqrt(4π) · δ_{l0} δ_{m0}
-        No SHT needed — just a dot product against weight_j.
-        """
-        R_sq_all = (jnp.abs(R_j_at_particles) ** 2).astype(self.compute_real_dtype)  # (N_p, Nj)
-        rho_r_p  = self.total_mass * (R_sq_all @ self.weight_j.astype(self.compute_real_dtype))  # (N_p,)
-        N_p      = rho_r_p.shape[0]
-        L_out    = self.L_max_out
-        out = jnp.zeros((N_p, L_out, 2 * L_out - 1), dtype=self.compute_dtype)
-        return out.at[:, 0, L_out - 1].set(rho_r_p * jnp.sqrt(4.0 * jnp.pi))
 
     def construct_rho_lms_gaunt(self, aj, parent_j, R_j_r_phased):
 
@@ -787,63 +857,44 @@ class StellarSimTDep:
         return flm_r
 
     def Build_rho_lms_for_timestep(self, time_step):
-        """Build rho_lms at `time_step`, applying the two-phase schedule.
-
-        Phase 1 (ramp, time_step < n_ramp_steps):
-            rho = rho_static + ramp_frac * (rho_full(t) - rho_static).
-            `rho_static` is the time-averaged (diagonal) density — the same
-            smooth background the circular-velocity ICs were built from. The
-            interference terms (the full time-dependent piece, both the
-            monopole's breathing and the l>=1 asphericity) are linearly
-            switched on from 0 to 1 over `ramp_time`.
-
-        Phase 2 (main, time_step >= n_ramp_steps):
-            rho = rho_full(t). Full instantaneous ULDM density, all terms.
+        """Build rho_lms at `time_step` from the full instantaneous ULDM
+        density (phase chosen by `get_phase_for_step`: frozen vs
+        time-evolving). If `static` is set, the (l>0 or m!=0) slots are
+        zeroed afterwards.
         """
 
         # Phase stays in float64/complex128 for long-time stability; cast to
         # the compute dtype only when multiplying R_j_r (which is c64/f32).
-        phase = jnp.exp(-1j * self.eigen_energies * time_step * self.dt / 1)
+        phase = self.get_phase_for_step(time_step)
         self.current_phase = phase
         phase_c = phase.astype(self.compute_dtype)
 
-        ramp_frac = self.ramp_frac_for_step(time_step)
-        self.current_ramp_frac = jnp.float64(ramp_frac)
-        # Cast ramp_frac to compute_real_dtype so multiplying it against a
-        # c64 array doesn't promote to c128 (which then breaks the
-        # c64 sharded output contract downstream).
-        ramp_c = jnp.asarray(ramp_frac, dtype=self.compute_real_dtype)
-
         if self.SphHT:
-            # Fused JIT: sparse-matmul -> scatter -> inv-SHT -> |.|^2 -> fwd-SHT
-            # -> per-chunk ramp blend + static (l=0,m=0) add. The ramp / static
-            # combine happens inside the scan so no second full-size
-            # (Nr, L, 2L-1) tensor is ever materialised. XLA frees flm_r /
-            # psi_rtp / rho_rtp transiently rather than holding them all at once.
-            return MSS.build_sphht_rho_lms_jit(
+            # Fused JIT: sparse-matmul -> scatter -> inv-SHT -> |.|^2 -> fwd-SHT.
+            # MSS still takes a (ramp_c, rho_static_r_l00) baseline pair so we
+            # pass ramp_c=1 and a zero baseline — the blend collapses to the
+            # full instantaneous rho.
+            rho_lms = MSS.build_sphht_rho_lms_jit(
                 self.R_j_r_fixed, phase_c,
                 self.aj_sorted, self.parent_j_sorted, self.bin_blocks.as_arrays(),
                 self.lm_pairs_jax, self.total_mass,
-                ramp_c, self.rho_static_r_l00,
+                self._ramp_c_one, self._rho_static_zero,
                 int(self.L_max_out),
                 int(self.N_unique_sphht), int(self.sparse_k_batch),
                 int(self.r_chunk_size),
                 out_sharding=self.sharding.shard_l,
             )
+        else:
+            # Gaunt path uses an external helper (`gf.compute_rho_lm_gaunt`)
+            # that expects an already-phased R_j_r; keep that contract but
+            # build the phased array transiently.
+            R_j_r_phased = self.R_j_r_fixed * phase_c[None, :]
+            rho_lms = self.construct_rho_lms_gaunt(self.aj, self.parent_j, R_j_r_phased)
+            del R_j_r_phased
 
-        # Gaunt path uses an external helper (`gf.compute_rho_lm_gaunt`)
-        # that expects an already-phased R_j_r; keep that contract but
-        # build the phased array transiently.
-        R_j_r_phased = self.R_j_r_fixed * phase_c[None, :]
-        rho_lms_full = self.construct_rho_lms_gaunt(self.aj, self.parent_j, R_j_r_phased)
-        del R_j_r_phased
+        if self.static:
+            rho_lms = self._apply_static_mask(rho_lms)
 
-        # rho_lms = (1 - ramp_frac) * rho_static + ramp_frac * rho_full.
-        L_out = self.L_max_out
-        rho_lms = ramp_c * rho_lms_full
-        rho_lms = rho_lms.at[:, 0, L_out - 1].add(
-            ((1.0 - ramp_c) * self.rho_static_r_l00).astype(rho_lms.dtype)
-        )
         return rho_lms
 
 
@@ -873,7 +924,7 @@ class StellarSimTDep:
         Inverse SHT to get psi on the dense grid, then square.
 
         Delegates to the module-level JIT'd helper using the SPARSE a_u_j
-        representation — `(self.aj, self.parent_j, self.lm_idx_per_mode)` —
+        representation — `(self.aj_sorted, self.parent_j_sorted, self.bin_blocks)` —
         so the `(N_unique, Nj)` dense matrix is never materialised. The
         scatter-add streams k-modes in batches of `self.sparse_k_batch`.
         '''
@@ -981,58 +1032,57 @@ class StellarSimTDep:
 
         if self.plot and not isinstance(particle_r, jax.core.Tracer):
 
-            if self.current_ramp_frac == 1.0:
-                # Materialise the inserted (Nr+1, L, 2L-1) rho_lms just for
-                # plotting — the JIT path avoids this transient (Change 3),
-                # but here we're eager and need it to line up with r_updated.
-                rho_lms_updated = jnp.where(
-                    insert_mask[:, None, None],
-                    rho_lm_at_particle[None, :, :],
-                    rho_lms[gather_idx],
-                )
+            # Materialise the inserted (Nr+1, L, 2L-1) rho_lms just for
+            # plotting — the JIT path avoids this transient, but here we're
+            # eager and need it to line up with r_updated.
+            rho_lms_updated = jnp.where(
+                insert_mask[:, None, None],
+                rho_lm_at_particle[None, :, :],
+                rho_lms[gather_idx],
+            )
 
-                for l in range(3):
-                    plt.plot(r_updated * self.u.to_Kpc, jnp.abs(rho_lms_updated[:, l, self.L_max_out - 1]) * self.u.to_Msun / (self.u.to_Kpc)**3, label=f'l={l}')
+            for l in range(3):
+                plt.plot(r_updated * self.u.to_Kpc, jnp.abs(rho_lms_updated[:, l, self.L_max_out - 1]) * self.u.to_Msun / (self.u.to_Kpc)**3, label=f'l={l}')
 
-                plt.xlabel('r (kpc)')
-                plt.ylabel(r'$\rho_{lm}$ [$M_\odot / kpc^3$]')
-                plt.title(f'Updated rho_lm with inserted particle at r={particle_r * self.u.to_Kpc:.3f} kpc')
-                plt.xscale('log')
-                plt.yscale('log')
-                plt.grid()
-                plt.legend()
-                plt.show()
+            plt.xlabel('r (kpc)')
+            plt.ylabel(r'$\rho_{lm}$ [$M_\odot / kpc^3$]')
+            plt.title(f'Updated rho_lm with inserted particle at r={particle_r * self.u.to_Kpc:.3f} kpc')
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.grid()
+            plt.legend()
+            plt.show()
 
-                def inverse_s2fft(rho_lm):
-                    return s2fft.inverse(rho_lm, int(self.L_max_out), sampling='mw', method='jax')
+            def inverse_s2fft(rho_lm):
+                return s2fft.inverse(rho_lm, int(self.L_max_out), sampling='mw', method='jax')
 
-                rho_rtp = jax.vmap(inverse_s2fft)(rho_lms_updated)  # (Nr+1, n_theta, n_phi)
+            rho_rtp = jax.vmap(inverse_s2fft)(rho_lms_updated)  # (Nr+1, n_theta, n_phi)
 
-                plotting_theta = int(self.theta.shape[0] / 2)
-                plotting_phi = 0
+            plotting_theta = int(self.theta.shape[0] / 2)
+            plotting_phi = 0
 
-                rho_r = rho_rtp[:, plotting_theta, plotting_phi]
-                plt.plot(r_updated * self.u.to_Kpc, jnp.abs(rho_r) * self.u.to_Msun / (self.u.to_Kpc)**3, label='Updated rho(r)')
+            rho_r = rho_rtp[:, plotting_theta, plotting_phi]
+            plt.plot(r_updated * self.u.to_Kpc, jnp.abs(rho_r) * self.u.to_Msun / (self.u.to_Kpc)**3, label='Updated rho(r)')
 
-                plt.xlabel('r (kpc)')
-                plt.ylabel(r'$\rho$ [$M_\odot / kpc^3$]')
-                plt.title(f'Updated rho(r) with inserted particle at r={particle_r * self.u.to_Kpc:.3f} kpc')
-                plt.xscale('log')
-                plt.yscale('log')
-                plt.grid()
-                plt.legend()
-                plt.show()
+            plt.xlabel('r (kpc)')
+            plt.ylabel(r'$\rho$ [$M_\odot / kpc^3$]')
+            plt.title(f'Updated rho(r) with inserted particle at r={particle_r * self.u.to_Kpc:.3f} kpc')
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.grid()
+            plt.legend()
+            plt.show()
 
 
         return dphi_lm_dr_at_r, phi_lm_at_r  # (Nmodes,), (Nmodes,)
 
     def calc_rho_lm_at_parts_and_call_insert(self, positions_sph, current_phase, radial_eigenmode_params, a_u_j, all_i, all_j,
-                              all_G, all_Lf, rho_lms, ramp_frac, sparse_au_j=None):
+                              all_G, all_Lf, rho_lms, sparse_au_j=None):
 
         """JIT-compilable: radial basis evaluation + batched rho_lm + vmap
         over the per-particle insertion step.
 
-        Changes 2 & 9: takes unpadded `rho_lms` (gather is done inside
+        Takes unpadded `rho_lms` (gather is done inside
         `insert_particle_rholm_and_get_philm`) and passes the per-step
         phase through to the SphHT/Gaunt density helpers without
         materialising a phased R_j table.
@@ -1058,26 +1108,22 @@ class StellarSimTDep:
         # expensive a_u_j matmul + Gaunt reduction happen once per call,
         # not once per particle.
 
-        #print('computing rho_lm at particle positions...')
         if self.SphHT:
             # `a_u_j` arg is ignored on this path; the sparse triplet arrives
             # as `sparse_au_j` (traced, not closed over — see
             # `compute_rho_lm_at_particles_sphht`).
-            rho_lm_at_particles_full = self.compute_rho_lm_at_particles_sphht(
+            rho_lm_at_particles = self.compute_rho_lm_at_particles_sphht(
                 R_j_at_particles, phase_c, sparse_au_j)
-
-
         else:
-            rho_lm_at_particles_full = self.compute_rho_lm_at_particles_gaunt(
+            rho_lm_at_particles = self.compute_rho_lm_at_particles_gaunt(
                 R_j_at_particles, phase_c, a_u_j, all_i, all_j, all_G, all_Lf,
             )
 
-        # Time-averaged (diagonal-only) rho_lm at the same radii. Used as
-        # the baseline for the ramp.
-        rho_lm_at_particles_static = self.compute_rho_lm_at_particles_diagonal_only(R_j_at_particles)
-
-        rho_lm_at_particles = (rho_lm_at_particles_static +
-                               ramp_frac * (rho_lm_at_particles_full - rho_lm_at_particles_static))
+        if self.static:
+            # Match the radial-grid mask: spherical-symmetric field — keep only
+            # the (l=0, m=0) slot. Cheap here: rho_lm_at_particles is
+            # (N_particles, L_out, 2L_out-1), so the new zeros tensor is small.
+            rho_lm_at_particles = self._apply_static_mask(rho_lm_at_particles)
         # rho_lm_at_particles : (N_particles, L_max_out, 2*L_max_out-1)
 
         #print('computing per-particle insertions and phi_lm...')
@@ -1120,7 +1166,6 @@ class StellarSimTDep:
             self.calc_rho_lm_at_parts_and_call_insert_jit = jax.jit(self.calc_rho_lm_at_parts_and_call_insert)
             self.combine_acc_jit = jax.jit(StellarSimTDep.combine_acc)
 
-        #print("Compiling JIT for per-particle rho_lm insertion and acc combination...")
         dphi_lm_dr_at_parts, phi_lm_at_parts = self.calc_rho_lm_at_parts_and_call_insert_jit(
             positions_sph,
             self.current_phase,
@@ -1131,13 +1176,9 @@ class StellarSimTDep:
             self._jit_all_G,
             self._jit_all_Lf,
             self.rho_lms,
-            self.current_ramp_frac,
             (self.aj_sorted, self.parent_j_sorted, self.bin_blocks.as_arrays())
             if self.SphHT else None,
         )
-
-
-        #print('got dphi_lm_dr_at_parts and phi_lm_at_parts from JIT-compiled function')
 
         if self.plot:
             # Eagerly recompute rho_lm for particle 0 so matplotlib gets concrete
@@ -1150,17 +1191,17 @@ class StellarSimTDep:
             phase_c = self.current_phase.astype(self.compute_dtype)
 
             if self.SphHT:
-                _rho_full_p0 = self.compute_rho_lm_at_particles_sphht(
+                _rho_p0 = self.compute_rho_lm_at_particles_sphht(
                     _R_j_p0, phase_c,
                     (self.aj_sorted, self.parent_j_sorted, self.bin_blocks.as_arrays()))
             else:
-                _rho_full_p0 = self.compute_rho_lm_at_particles_gaunt(
+                _rho_p0 = self.compute_rho_lm_at_particles_gaunt(
                     _R_j_p0, phase_c, self.a_u_j, self._jit_all_i, self._jit_all_j,
                     self._jit_all_G, self._jit_all_Lf,
                 )
-            _rho_static_p0 = self.compute_rho_lm_at_particles_diagonal_only(_R_j_p0)
-            _rho_p0 = (_rho_static_p0[0]
-                       + self.current_ramp_frac * (_rho_full_p0[0] - _rho_static_p0[0]))
+            _rho_p0 = _rho_p0[0]
+            if self.static:
+                _rho_p0 = self._apply_static_mask(_rho_p0)
             self.insert_particle_rholm_and_get_philm(
                 positions_sph[0], _rho_p0, self.rho_lms,
             )
@@ -1227,7 +1268,6 @@ class StellarSimTDep:
         state = {
             'sim_time_step': self.time_step,
             'no_time_steps': self.no_time_steps,
-            'n_ramp_steps': self.n_ramp_steps,
             'sim_t': float(self.sim.t),
             'particle_states': particle_states,
         }
@@ -1250,7 +1290,6 @@ class StellarSimTDep:
                 state = pickle.load(f)
             self.time_step = state['sim_time_step']
             self.no_time_steps = state['no_time_steps']
-            self.n_ramp_steps = state['n_ramp_steps']
             self.sim.t = state['sim_t']
             for particle, ps in zip(self.particles, state['particle_states']):
                 particle.r_pos = ps['r_pos']
@@ -1287,7 +1326,6 @@ class StellarSimTDep:
 
         self.time_step = state['sim_time_step']
         self.no_time_steps = state['no_time_steps']
-        self.n_ramp_steps = state['n_ramp_steps']
         self.sim.t = state['sim_t']
 
         for particle, ps in zip(self.particles, state['particle_states']):
@@ -1340,10 +1378,11 @@ class StellarSimTDep:
     def run_simulation(self, checkpoint_every=50, checkpoint_dir=None):
 
         if checkpoint_dir is None:
-            _script_dir = os.path.dirname(os.path.abspath(__file__))
-            _script_dir = '/rds/general/user/jd925/ephemeral/'
+            _script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            tag = ("frozen_" if self.frozen else "") + ("static_" if self.static else "")
             checkpoint_dir = os.path.join(
-                _script_dir, "Checkpoints", f"checkpoints_m22_{self.m22:g}_r0_{self.r_half:g}"
+                _script_dir, "Checkpoints",
+                f"checkpoints_{tag}m22_{self.m22:g}_r0_{self.r_half:g}_Lout_{self.L_out_frac:g}"
             )
 
         start = time()
@@ -1415,28 +1454,18 @@ class StellarSimTDep:
         self.output_lm_pairs = output_lm_pairs
         self.lm_pairs_np = np.array(output_lm_pairs)
 
-        # Ramp phase: linearly switch on the off-diagonal cross-terms — i.e.
-        # the time-dependent piece — over `ramp_time` so particles are not
-        # abruptly exposed to the full fluctuating spectrum. After the ramp
-        # the system evolves for `total_evolve_time` in the full ULDM
-        # potential.
-        ramp_time = self.ramp_time * self.u.from_Gyr
-        self.n_ramp_steps = int(jnp.ceil(ramp_time / self.dt).item())
-
-        # Update no_time_steps to include ramp steps on top of the original
-        # main-phase steps.
-        self.no_time_steps = self.n_ramp_steps + self.no_time_steps
-        print(f"Ramp phase: {self.n_ramp_steps} steps "
-              f"({self.n_ramp_steps * self.dt * self.u.to_Gyr:.3f} Gyr)")
-        print(f"Main phase: {self.no_time_steps - self.n_ramp_steps} steps "
-              f"({(self.no_time_steps - self.n_ramp_steps) * self.dt * self.u.to_Gyr:.3f} Gyr)")
         print(f"Total: {self.no_time_steps} steps")
 
+        # MSS.build_sphht_rho_lms_jit still takes a (ramp_c, rho_static_r_l00)
+        # baseline pair. Pre-allocate constants that collapse the blend to
+        # rho_full (ramp_c = 1, baseline = 0).
+        self._ramp_c_one = jnp.asarray(1.0, dtype=self.compute_real_dtype)
+        self._rho_static_zero = jnp.zeros(
+            (self.R_j_r_fixed.shape[0],), dtype=self.compute_dtype)
 
-        # rho_static_r_l00 (the time-averaged diagonal monopole, used as the
-        # ramp baseline) was precomputed in initialising_simulation;
-        # Build_rho_lms_for_timestep needs it in self. Result is cast to
-        # compute_dtype and sharded along L.
+        # Build the initial rho_lms; cast to compute_dtype and (optionally)
+        # shard along L. The gather-based insert in
+        # `insert_particle_rholm_and_get_philm` consumes this directly.
         self.rho_lms = self.sharding.shard_l_arr(self.Build_rho_lms_for_timestep(0).astype(self.compute_dtype))
         print('completed rho_lms precomputation')
         # Change 2: rho_lms_below / rho_lms_above are no longer pre-built.
@@ -1593,7 +1622,7 @@ class StellarSimTDep:
             #particle.Change_to_new_vel(v_new)
 
         # Preallocate the per-particle velocity history array now that
-        # no_time_steps is final (after dt_override + ramp adjustments).
+        # no_time_steps is final (after the dt_override adjustment).
         for particle in self.particles:
             particle.Create_V_array(self.no_time_steps)
         
@@ -1635,7 +1664,10 @@ class StellarSimTDep:
             print(f"Time stepping all particles completed in {end - start:.2f} seconds")
 
 
-            self.current_phase = jnp.exp(-1j * self.eigen_energies * (self.time_step + 1) * self.dt / 1)
+            # Phase at the NEW time, routed through the same frozen selector
+            # as Build_rho_lms_for_timestep so the post-step potential energy
+            # is sampled in the same field the forces saw.
+            self.current_phase = self.get_phase_for_step(self.time_step + 1)
 
             # Compute phi at updated particle positions for potential energy tracking
             r_pos_sphs_new = jnp.array([p.r_pos_sph for p in self.particles])

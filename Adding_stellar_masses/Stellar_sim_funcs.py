@@ -23,7 +23,7 @@ import matplotlib
 
 from scipy.interpolate import interp1d
 
-from scipy.special import sph_harm
+from scipy.special import sph_harm_y
 
 import s2fft
 
@@ -93,7 +93,7 @@ def Obtain_pot(rmin, rmax, rho_psi_vals, r):
 
 def Enclosed_mass(r, rho):
 
-    dr = np.diff(r)
+    dr = jnp.diff(r)
 
     integrand = 4 * jnp.pi * r**2 * rho
 
@@ -165,120 +165,6 @@ def acceleration_spherical_to_cartesian_np(a_r, a_theta, a_phi, theta, phi):
     a_z = a_r * cos_t         - a_theta * sin_t
     return a_x, a_y, a_z
 
-
-# ------------------------------------------------------------------
-# JAX-native spherical harmonic evaluator.
-#
-# Drop-in replacement for the diff_n=1 path of scipy.special.sph_harm_y
-# used in the time-dependent ULDM simulations. Returns Y_l^m and
-# dY_l^m/dtheta at scattered (theta, phi) points for every (l, m) with
-# 0 <= l < L_max_out, -l <= m <= l, in the order
-#     (0, 0), (1, -1), (1, 0), (1, 1), (2, -2), ..., (L_max_out-1, L_max_out-1).
-#
-# Why: scipy's sph_harm_y dominates the unjitted per-step cost (~125 ms/call
-# in our profile of Analytic_t_dep_sim_Ylm_skip.py). This implementation runs
-# inside a single jit, so the only host<->device traffic is the (theta, phi)
-# inputs and the final Ylm / dY arrays.
-#
-# Convention matches scipy: Condon-Shortley phase baked into P_l^m, and
-#     Y_l^{-m}(theta, phi) = (-1)^m conj(Y_l^m(theta, phi)).
-# Uses the fully-normalised associated Legendre recurrence (Holmes &
-# Featherstone 2002 / Wieczorek & Meschede 2018). Numerically stable for
-# the lmax ~ 50 regime we run at.
-#
-# NOTE: dY/dtheta uses the identity
-#     dP̄_l^m/dtheta = [l x P̄_l^m - C_lm P̄_{l-1}^m] / sin(theta),
-# which diverges at sin(theta) = 0. Particles must not sit exactly on the
-# z-axis. (This is a coordinate singularity the existing scipy path shares
-# via the a_phi / (r sin theta) acceleration term.)
-# ------------------------------------------------------------------
-
-def _NALF_recurrence(L_max_out, x, u):
-    """Build dict {(l, m): P̄_l^m(cos theta)} for 0 <= m <= l < L_max_out.
-
-    x = cos(theta), u = sin(theta); both JAX arrays of shape (N_particles,).
-    """
-    lmax = L_max_out - 1
-    P = {(0, 0): jnp.full_like(x, 1.0 / (2.0 * jnp.sqrt(jnp.pi)))}
-    # Diagonal: P̄_m^m = -sqrt((2m+1)/(2m)) u P̄_{m-1}^{m-1}
-    for m in range(1, lmax + 1):
-        coef = -jnp.sqrt((2.0 * m + 1.0) / (2.0 * m))
-        P[(m, m)] = coef * u * P[(m - 1, m - 1)]
-    # First above-diagonal: P̄_{m+1}^m = sqrt(2m+3) x P̄_m^m
-    for m in range(lmax):
-        P[(m + 1, m)] = jnp.sqrt(2.0 * m + 3.0) * x * P[(m, m)]
-    # General: P̄_l^m = a_lm [x P̄_{l-1}^m - b_lm P̄_{l-2}^m] for l >= m+2
-    for m in range(lmax - 1):
-        for l in range(m + 2, lmax + 1):
-            a_lm = jnp.sqrt((4.0 * l * l - 1.0) / (l * l - m * m))
-            b_lm = jnp.sqrt(((l - 1.0) ** 2 - m * m) / (4.0 * (l - 1.0) ** 2 - 1.0))
-            P[(l, m)] = a_lm * (x * P[(l - 1, m)] - b_lm * P[(l - 2, m)])
-    return P
-
-
-def _dNALF_dtheta(L_max_out, P, x, u):
-    """Build dict {(l, m): dP̄_l^m/dtheta} from the NALF table.
-
-    For m == l the (l, l-1) reference is zero, which the formula handles
-    via C_lm vanishing — so a single branch suffices. (0, 0) is set to
-    zero explicitly because the formula yields 0/u there.
-    """
-    lmax = L_max_out - 1
-    dP = {(0, 0): jnp.zeros_like(x)}
-    for l in range(1, lmax + 1):
-        for m in range(l + 1):
-            if m == l:
-                dP[(l, m)] = (l * x * P[(l, m)]) / u
-            else:
-                C_lm = jnp.sqrt((l * l - m * m) * (2.0 * l + 1.0) / (2.0 * l - 1.0))
-                dP[(l, m)] = (l * x * P[(l, m)] - C_lm * P[(l - 1, m)]) / u
-    return dP
-
-
-@functools.partial(jax.jit, static_argnums=0)
-def Ylm_dY_jax(L_max_out, theta, phi, eps=1e-8):
-    """Y_l^m(theta, phi) and dY_l^m/dtheta(theta, phi) for all modes up to L_max_out.
-
-    theta, phi : 1-D JAX arrays of shape (N_particles,).
-    eps        : pole clamp. theta is clipped to [eps, pi - eps] before the
-                 sin(theta) division so a particle that lands exactly on the
-                 z-axis (or to within float roundoff of it) returns large-but-
-                 finite values instead of NaN. The underlying singularity is
-                 real (spherical coords break down at the poles, and the
-                 simulation's a_phi has a 1/sin(theta) factor) — this clamp
-                 only prevents the silent NaN propagation.
-                 Default 1e-8 caps |dY/dtheta| at roughly 1e8.
-    Returns
-        Y_lm        : (L_max_out**2, N_particles) complex
-        dY_dtheta   : (L_max_out**2, N_particles) complex
-    Modes are returned in the same order as
-        [(L, M) for L in range(L_max_out) for M in range(-L, L+1)],
-    matching the existing `output_lm_pairs` in the simulation code.
-
-    L_max_out is a static argument — JIT recompiles only if it changes,
-    which it shouldn't during a run. Tracing/compile time grows ~quadratically
-    in L_max_out (a few seconds for L_max_out ~ 47).
-    """
-    theta = jnp.clip(theta, eps, jnp.pi - eps)
-    x = jnp.cos(theta)
-    u = jnp.sin(theta)
-    P  = _NALF_recurrence(L_max_out, x, u)
-    dP = _dNALF_dtheta(L_max_out, P, x, u)
-
-    Y_list = []
-    dY_list = []
-    for l in range(L_max_out):
-        for m in range(-l, l + 1):
-            abs_m = abs(m)
-            # sign = (-1)^|m| if m < 0 else 1   (from Y_{l,-m} = (-1)^m conj(Y_{l,|m|}))
-            sign = -1.0 if (m < 0 and (abs_m % 2 == 1)) else 1.0
-            e_imphi = jnp.exp(1j * m * phi)
-            Y_list.append(sign * P[(l, abs_m)] * e_imphi)
-            dY_list.append(sign * dP[(l, abs_m)] * e_imphi)
-
-    Y_lm      = jnp.stack(Y_list,  axis=0)
-    dY_dtheta = jnp.stack(dY_list, axis=0)
-    return Y_lm, dY_dtheta
 
 
 def Time_step_t_indep(r_pos, v, dt, acc_mag, velocities, avg_r, i):
@@ -690,7 +576,7 @@ def Calculating_rho_from_psi_3d(r, eigenstate_lib, wavefunction_params, dt, eval
 
     Y_list = []
     for ell, m in zip(lm_l, lm_m):
-        Y_lm_mode = sph_harm(m, ell, Phi, Theta)  # (n_theta, n_phi), complex
+        Y_lm_mode = sph_harm_y(ell, m, Theta, Phi)  # (n_theta, n_phi), complex
         Y_list.append(Y_lm_mode)
 
     Y_lm = jnp.stack(Y_list, axis=0)  # (Nmodes, n_theta, n_phi), complex

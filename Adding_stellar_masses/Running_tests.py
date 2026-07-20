@@ -2,19 +2,16 @@
 import os
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 #os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 #os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
-
 import sys
-
-sys.path.insert(0, "/home/joshua/PhD_year_1/jaxsp/Adding_stellar_masses")
-
+sys.path.append('/gpfs/home/jd925/Adding_stellar_masses/Tests')
 
 import jax
-jax.config.update("jax_compilation_cache_dir", "/home/joshua/.jax_cache")
+
 jax.config.update("jax_persistent_cache_min_compile_time_secs", 60)
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
 jax.config.update("jax_enable_x64", True)
@@ -34,32 +31,28 @@ import pandas as pd
 from collections import defaultdict
 
 
-
 import importlib
 importlib.reload(AT)
-
-
 
 
 
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-dt_override = 2
+dt_override = 0.5
 
 frozen = True
 static = False
 
-
-l_band_size = 128
+l_band_size = 32
 use_multi_gpu = True
-sparse_k_batch=16384
-r_chunk_size = 32
+sparse_k_batch=262144
+r_chunk_size = 128
 compute_dtype = jnp.complex64
 
-L_out_frac = 1
+L_out_frac = 0.2
 
-m22 = 10
+m22 = 50
 R0 = 1
 
 

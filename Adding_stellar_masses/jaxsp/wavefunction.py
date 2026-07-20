@@ -94,6 +94,7 @@ def init_wavefunction_params(
     r_fit,
     tol,
     objective_function=jensen_shannon_divergence,
+    sharding_manager=None,
 ):
     return_single = False
     if not isinstance(tol, list):
@@ -115,6 +116,13 @@ def init_wavefunction_params(
         eigenstate_library, density_params, r_min, r_fit
     )
 
+    # Shard the (order, J) integrand matrix across GPUs along J so that
+    # each device holds (order, J/n_dev) — the main memory bottleneck.
+    if sharding_manager is not None:
+        R_j2_log_rj, rho_in_log_rj, dlogr_jac, w_i = precomputed_quantities
+        R_j2_log_rj = sharding_manager.shard_nj_arr(R_j2_log_rj)
+        precomputed_quantities = (R_j2_log_rj, rho_in_log_rj, dlogr_jac, w_i)
+
     gd = GradientDescent(
         fun=objective_function,
         maxiter=100,
@@ -130,7 +138,14 @@ def init_wavefunction_params(
         linesearch="hager-zhang",
     )
 
-    log_aj2 = jnp.log(jnp.ones(eigenstate_library.J) / eigenstate_library.J)
+    J_orig = eigenstate_library.J
+    log_aj2 = jnp.log(jnp.ones(J_orig) / J_orig)
+    # Shard the optimizer parameter vector along J so LBFGS history buffers
+    # (history_size, J) are also distributed — the other large memory consumer.
+    # shard_j_arr may pad to the nearest multiple of n_dev; J_orig is used
+    # below to strip any padding before storing aj_2.
+    if sharding_manager is not None:
+        log_aj2 = sharding_manager.shard_j_arr(log_aj2)
     res = gd.run(log_aj2, precomputed_quantities=precomputed_quantities)
 
     kwargs_solver = {
@@ -140,6 +155,7 @@ def init_wavefunction_params(
         "stop_if_linesearch_fails": True,
         "implicit_diff": False,
         "linesearch": "hager-zhang",
+        "history_size": 3,  # default=10; each slot costs J×8 bytes on GPU
     }
 
     params = res.params
@@ -156,7 +172,7 @@ def init_wavefunction_params(
         return wavefunction_params(
             eigenstate_library=eigenstate_library.name,
             density_params=density_params.name,
-            aj_2=jnp.exp(params),
+            aj_2=jnp.exp(params[:J_orig]),
             r_min=r_min,
             r_fit=r_fit,
             total_mass=total_mass(density_params),
