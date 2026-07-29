@@ -42,7 +42,7 @@ importlib.reload(gf)
 
 sm = ShardingManager(use_multi_gpu=True)
 
-m22_list = [80, 85, 90, 95, 100]
+m22_list = [1, 90, 95, 100]
 R_bins = [1000]
 
 

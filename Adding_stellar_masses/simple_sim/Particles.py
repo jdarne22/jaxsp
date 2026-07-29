@@ -1,5 +1,5 @@
 import numpy as np
-import Helper_funcs as HF
+import Maths_funcs as MF
 
 
 class Simulation_Particle:
@@ -20,8 +20,8 @@ class Simulation_Particle:
         self.v     = np.array(init_vel_cart)  
 
         # Convert to spherical for initial record
-        self.r_pos_sph = HF.Cartesian_to_sph(self.r_pos[0], self.r_pos[1], self.r_pos[2])
-        self.v_sph = HF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2],self.v[0], self.v[1], self.v[2])
+        self.r_pos_sph = MF.Cartesian_to_sph(self.r_pos[0], self.r_pos[1], self.r_pos[2])
+        self.v_sph = MF.Cartesian_to_sph_vel(self.r_pos[0], self.r_pos[1], self.r_pos[2],self.v[0], self.v[1], self.v[2])
 
         # History of velocities, stellar dispersions, radii, positions, energies and angular momenta
         self.velocities      = [self.v_sph]
@@ -40,6 +40,15 @@ class Simulation_Particle:
         self.time_step = 0
 
 
+    def Create_V_array(self, no_time_steps):
+        """
+        Preallocates the per-timestep velocity history array now that
+        no_time_steps is known; row 0 is the initial v_sph, update_state
+        writes each subsequent step in place at row time_step + 1.
+        """
+        self.velocities_arr = np.empty((no_time_steps + 1, 3))
+        self.velocities_arr[0] = self.v_sph
+
     def update_state(self, new_pos_cart, new_vel_cart):
         """
         Called after each rebound integration step to update this particle's
@@ -52,8 +61,8 @@ class Simulation_Particle:
         self.r_pos = np.array([x, y, z])
         self.v     = np.array([vx, vy, vz])
 
-        r, theta, phi      = HF.Cartesian_to_sph_np(x, y, z)
-        vr, vtheta, vphi   = HF.Cartesian_to_sph_vel_np(x, y, z, vx, vy, vz)
+        r, theta, phi      = MF.Cartesian_to_sph_np(x, y, z)
+        vr, vtheta, vphi   = MF.Cartesian_to_sph_vel_np(x, y, z, vx, vy, vz)
         self.r_pos_sph     = np.array([r, theta, phi])
         self.v_sph         = np.array([vr, vtheta, vphi])
 

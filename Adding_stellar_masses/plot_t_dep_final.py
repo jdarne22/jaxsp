@@ -48,7 +48,7 @@ print(f"\nLoading {ckpt_path}")
 with open(ckpt_path, "rb") as f:
     state = pickle.load(f)
 
-n_steps = state["sim_time_step"]
+n_steps = state["no_time_steps"]
 n_ramp  = state.get("n_ramp_steps", 0)
 dt_Gyr  = (state["sim_t"] / n_steps) * to_Gyr
 print(f"Steps: {n_steps}, ramp steps: {n_ramp}, dt = {dt_Gyr:.5f} Gyr")
@@ -104,7 +104,7 @@ ax.text(1.02, 0.98, info, transform=ax.transAxes,
 
 ax.set_xlabel("Time [Gyr]")
 ax.set_ylabel("Average Stellar Radius [kpc]")
-ax.set_title(f"Average Stellar Radius vs Time  (m22={M22}, Lout={LOUT}, $r_{{1/2}}$={r_half_kpc:.3f} kpc)")
+ax.set_title(f"Average Stellar Radius vs Time  (m22={M22}, Lout={LOUT}, $r_{{1/2}}$={r_half_kpc:.3f} kpc, N_part={N_part})")
 ax.legend(bbox_to_anchor=(1, 0.7))
 
 out1 = os.path.join(PLOT_DIR, f"t_dep_lf_m{m22_str}_R0_{r_half_str}_Lout{lout_str}_part_{N_part}.png")

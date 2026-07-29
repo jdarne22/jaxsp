@@ -5,16 +5,18 @@ import os
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 #os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import sys
 sys.path.append('/gpfs/home/jd925/Adding_stellar_masses/Tests')
 
 import jax
 
-jax.config.update("jax_persistent_cache_min_compile_time_secs", 60)
-jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
 jax.config.update("jax_enable_x64", True)
+
+
 
 
 import Analytic_test as AT
@@ -39,7 +41,7 @@ importlib.reload(AT)
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-dt_override = 0.5
+dt_override = 0.1
 
 frozen = True
 static = False
@@ -57,7 +59,7 @@ R0 = 1
 
 
 
-sim = AT.StellarSimTDep(m22 = m22, r_half = R0, r_half_width = 0.05, no_of_particles = 5, no_time_steps = 1000, total_evolve_time = 10, r_min = 20,
+sim = AT.StellarSimTDep(m22 = m22, r_half = R0, r_half_width = 0.05, no_of_particles = 100, no_time_steps = 1000, total_evolve_time = 10, r_min = 20,
                             r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, frozen = frozen, static = static,
                             plot = plot, dt_override=dt_override, l_band_size=l_band_size, use_multi_gpu = use_multi_gpu,
                                 sparse_k_batch=sparse_k_batch, r_chunk_size=r_chunk_size, compute_dtype=compute_dtype, L_out_frac=L_out_frac)

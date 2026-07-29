@@ -64,10 +64,10 @@ sparse_k_batch=262144
 r_chunk_size = 128
 compute_dtype = jnp.complex64
 
-L_out_frac = 0.2
+L_out_frac = 1
 
-m22 = 70
-R0 = [0.19]
+m22 = 10
+R0 = [1]
 
 for R0 in R0:
 

@@ -1,0 +1,20 @@
+m22=10.0, r0=1.0, Lout=1.0 (checkpoints: /gpfs/home/jd925/Adding_stellar_masses/Checkpoints/checkpoints_m22_10_r0_1_Lout_1)
+Unit conversions: 1 code length = 6.7215 kpc, 1 code time = 23.0420 Gyr
+
+Loading /gpfs/home/jd925/Adding_stellar_masses/Checkpoints/checkpoints_m22_10_r0_1_Lout_1/checkpoint_final.pkl
+Steps: 2040, ramp steps: 0, dt = 0.00490 Gyr
+Particles: 100, time points: 2041
+Inferred r_half = 1.0014 kpc
+T_orb = 0.390 Gyr, T_c = 0.008 Gyr
+
+Saved: /gpfs/home/jd925/Adding_stellar_masses/Plots/T_dep/M_10/t_dep_lf_m10_R0_1.00_Lout1_part_100.png
+Saved: /gpfs/home/jd925/Adding_stellar_masses/Plots/T_dep/M_10/t_dep_lf_eng_amom_m10_R0_1.00_Lout1_part_100.png
+
+====================================
+CPU Time used: 00:00:00
+CPU Percent: 0%
+Memory usage: 0b
+Approx Power usage: 0.0
+Walltime usage: 00:00:13
+
+====================================

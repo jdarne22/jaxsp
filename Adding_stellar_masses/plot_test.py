@@ -13,7 +13,6 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, "/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses")
 import jax
 jax.config.update("jax_enable_x64", True)
 import jaxsp as jsp
@@ -24,7 +23,7 @@ parser.add_argument("--r0",   type=float, required=True)
 parser.add_argument("--Lout", type=float, required=True)
 args = parser.parse_args()
 
-WORKDIR   = "/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Checkpoints/"
+WORKDIR   = "/gpfs/home/jd925/Adding_stellar_masses/Checkpoints/"
 M22       = args.m22
 R0        = args.r0
 LOUT      = args.Lout
@@ -32,7 +31,7 @@ m22_str   = f"{M22:g}"
 r0_str_in = f"{R0:g}"
 lout_str  = f"{LOUT:g}"
 CKPT_DIR  = os.path.join(WORKDIR, f"checkpoints_frozen_m22_{m22_str}_r0_{r0_str_in}_Lout_{lout_str}")
-PLOT_DIR = "/rds/general/user/jd925/home/PhD_first_year/jaxsp/Adding_stellar_masses/Plots/Sim_tests/"
+PLOT_DIR = "/gpfs/home/jd925/Adding_stellar_masses/Plots/Sim_tests/"
 os.makedirs(PLOT_DIR, exist_ok=True)
 
 u = jsp.set_schroedinger_units(M22)
@@ -103,7 +102,7 @@ ax.text(1.02, 0.98, info, transform=ax.transAxes,
 
 ax.set_xlabel("Time [Gyr]")
 ax.set_ylabel("Average Stellar Radius [kpc]")
-ax.set_title(f"Average Stellar Radius vs Time  (m22={M22}, r0={R0}, Lout={LOUT}, $r_{{1/2}}$={r_half_kpc:.3f} kpc)")
+ax.set_title(f"Average Stellar Radius vs Time  (m22={M22}, r0={R0}, Lout={LOUT}, $r_{{1/2}}$={r_half_kpc:.3f} kpc, N_part={N_part})")
 ax.legend(bbox_to_anchor=(1, 0.7))
 
 out1 = os.path.join(PLOT_DIR, f"frozen_lf_m{m22_str}_R0_{r_half_str}_Lout{lout_str}.png")

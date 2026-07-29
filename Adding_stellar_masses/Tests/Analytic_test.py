@@ -246,7 +246,7 @@ class StellarSimTDep:
 
     def initialising_simulation(self):
 
-        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "precomputed_wf")
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'precomputed_wf')
         os.makedirs(cache_dir, exist_ok=True)
         cache_suffix = f"m22_{float(self.m22):.6g}_rbins_{int(self.no_radius_bins)}"
         r_j_r_fname = os.path.join(cache_dir, f"precomputed_R_j_r_{cache_suffix}.npz")
@@ -372,6 +372,7 @@ class StellarSimTDep:
         # silently drop eigenmode contributions, not just truncate rho.
         L_max_out_full = 2 * L - 1
         if self.SphHT and self.L_out_frac < 1.0:
+            #L_sht = max(int(round(self.L_out_frac * L_max_out_full)), L)
             L_sht = int(round(self.L_out_frac * L_max_out_full))
             self.L_max_out = L_sht
             print(f"SphHT bandwidth truncated by L_out_frac={self.L_out_frac}: "
@@ -385,7 +386,7 @@ class StellarSimTDep:
         if self.sharding.shard_l is not None:
             n_dev = len(self.sharding.devices)
             if self.L_max_out % n_dev != 0:
-                L_aligned = max((self.L_max_out // n_dev) * n_dev, L)
+                L_aligned = (self.L_max_out // n_dev) * n_dev
                 print(f"L_max_out {self.L_max_out} not divisible by {n_dev} devices; "
                       f"rounding down to {L_aligned} for L-sharding.")
                 self.L_max_out = L_aligned
