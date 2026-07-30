@@ -180,7 +180,7 @@ importlib.reload(ATDS_MS)
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-dt_override = 2
+dt_override = 1
 ramp_time = 0
 
 
@@ -194,16 +194,17 @@ compute_dtype = jnp.complex64
 L_sims = []
 
 m22 = 10
+R0 = 1
 
 
-for L_out_frac in [1, 0.9, 0.8, 0.7, 0.6, 0.5]:
+for L_out_frac in [0.2, 0.1]:
 
   print(f"Running sim with L_out_frac = {L_out_frac}...")
 
-  sim = ATDS_MS.StellarSimTDep(m22 = 10, r_half = 0.19, r_half_width = 0.05, no_of_particles = 5, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
+  sim = ATDS_MS.StellarSimTDep(m22 = m22, r_half = R0, r_half_width = 0.05, no_of_particles = 5, no_time_steps = 1000, total_evolve_time = 10, r_min = 20, 
                                 r_max_enclosing_frac = 0.99, no_radius_bins = 1000, SphHT = SphHT, integrator = integrator, 
                                 plot = plot, dt_override=dt_override, ramp_time=ramp_time, l_band_size=l_band_size, use_multi_gpu = use_multi_gpu,
-                                  sparse_k_batch=sparse_k_batch, r_chunk_size=r_chunk_size, compute_dtype=jnp.complex128, L_out_frac=L_out_frac)
+                                  sparse_k_batch=sparse_k_batch, r_chunk_size=r_chunk_size, compute_dtype=compute_dtype, L_out_frac=L_out_frac)
 
 
   sim.run_simulation() 

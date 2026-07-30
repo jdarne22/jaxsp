@@ -329,7 +329,7 @@ class StellarSimTDep:
         # silently drop eigenmode contributions, not just truncate rho.
         L_max_out_full = 2 * L - 1
         if self.SphHT and self.L_out_frac < 1.0:
-            L_sht = max(int(round(self.L_out_frac * L_max_out_full)), L)
+            L_sht = int(round(self.L_out_frac * L_max_out_full))
             self.L_max_out = L_sht
             print(f"SphHT bandwidth truncated by L_out_frac={self.L_out_frac}: "
                   f"L_max_out = {self.L_max_out} (natural 2L-1 = {L_max_out_full}, floor L = {L})")
@@ -411,13 +411,7 @@ class StellarSimTDep:
 
         # Constructing initial conditions based on Andrew paper
 
-        # The static background is the time-averaged (diagonal) density — the
-        # smooth profile the halo is built to reproduce. Both arXiv:2510.17079
-        # (Eq. 8) and arXiv:2604.26393 (§III) set the orbit ICs in this mean
-        # field and treat the granular fluctuations as a perturbation ramped
-        # on top; the instantaneous granule snapshot is NOT the equilibrium.
-        # compute_diagonal_rho_expansion also sets self.weight_j (reused
-        # per-particle during the ramp).
+        # The static background is the time-averaged (diagonal) density
         rho_diag = self.compute_diagonal_rho_expansion()
 
         # (l=0, m=0) coefficient of the same diagonal density — the ramp
@@ -776,26 +770,6 @@ class StellarSimTDep:
         return rho_lms
 
 
-    def construct_rho_rtp(self, R_j_r_fixed, phase_c, lm_pairs):
-
-        '''
-        Construct rho_rtp without using Y_lms.
-        Inverse SHT to get psi on the dense grid, then square.
-
-        Delegates to the module-level JIT'd helper using the SPARSE a_u_j
-        representation — `(self.aj, self.parent_j, self.lm_idx_per_mode)` —
-        so the `(N_unique, Nj)` dense matrix is never materialised. The
-        scatter-add streams k-modes in batches of `self.sparse_k_batch`.
-        '''
-        return MSS.build_sphht_rho_rtp_jit(
-            R_j_r_fixed, phase_c,
-            self.aj, self.parent_j, self.lm_idx_per_mode,
-            lm_pairs, self.total_mass, int(self.L_max_out),
-            int(self.N_unique_sphht), int(self.sparse_k_batch),
-            int(self.r_chunk_size),
-        )
-
-
     def compute_rho_lm_at_particles_gaunt(self, R_j_at_parts, phase_c, a_u_j, all_i, all_j, all_G, all_Lf):
 
         """Batched Gaunt path: compute rho_lm at every particle's radius in
@@ -893,7 +867,7 @@ class StellarSimTDep:
                     rho_lms[gather_idx],
                 )
 
-                for l in range(3):
+                for l in range(0, self.L_max_out, 10):
                     plt.plot(r_updated * self.u.to_Kpc, jnp.abs(rho_lms_updated[:, l, self.L_max_out - 1]) * self.u.to_Msun / (self.u.to_Kpc)**3, label=f'l={l}')
 
                 plt.xlabel('r (kpc)')
@@ -1046,6 +1020,10 @@ class StellarSimTDep:
             # `not isinstance(particle_r, jax.core.Tracer)` — fires.
             _p0_r = positions_sph[0:1, 0]
             _R_j_p0 = self._eval_library(_p0_r, eigenstate_lib.radial_eigenmode_params)
+            # Match the Nj-axis padding applied to R_j_r_fixed / weight_j under
+            # multi-GPU sharding (see calc_rho_lm_at_parts_and_call_insert).
+            if self.nj_pad:
+                _R_j_p0 = jnp.pad(_R_j_p0, ((0, 0), (0, self.nj_pad)))
 
             phase_c = self.current_phase.astype(self.compute_dtype)
 
