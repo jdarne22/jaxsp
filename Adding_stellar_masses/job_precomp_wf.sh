@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N Precomp
-#PBS -l select=1:ncpus=1:mem=256gb:ngpus=2:gpu_type=A100
-#PBS -l walltime=72:00:00
+#PBS -l select=1:ncpus=1:mem=256gb:ngpus=1:gpu_type=A100
+#PBS -l walltime=24:00:00
 #PBS -o /gpfs/home/jd925/Adding_stellar_masses/logs/job_precomp_output.log
 #PBS -e /gpfs/home/jd925/Adding_stellar_masses/logs/job_precomp_error.log
 

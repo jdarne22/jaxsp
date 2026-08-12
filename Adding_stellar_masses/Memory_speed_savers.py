@@ -12,9 +12,7 @@ import s2fft
 from jax.experimental.shard_map import shard_map
 from jax.sharding import NamedSharding, PartitionSpec as P
 
-# Private JAX helper that builds the associated-Legendre table directly at
-# the shape we actually need - see compute_Ylm_and_dtheta_jit for why.
-from jax._src.scipy.special import _gen_associated_legendre
+
 
 # Vocabulary used throughout this file:
 #   k-mode : one basis function, labelled by a radial mode j and angular
@@ -475,6 +473,114 @@ def build_sphht_rho_lms_jit(R_j_r_fixed, phase_c, aj, parent_j, blocks,
     return rho_lm_accumulator[:n_radii]
 
 
+def normalised_legendre_table(n_max, x):
+    """
+    Normalised associated Legendre functions, as an
+    (n_max+1, n_max+1, len(x)) table indexed [order m, degree l, point].
+
+    Same recurrences, in the same order, as
+    `jax._src.scipy.special._gen_associated_legendre(n_max, x, True)` -
+    values are bit-identical - with one thing removed: that function
+    materialises its per-iteration coefficients as two DENSE
+    (n_max+1, n_max+1, n_max+1) arrays, `d0_mask_3d` / `d1_mask_3d`, and
+    reads row i out of them at iteration i. Each is 8 (n_max+1)^3 bytes,
+    5.7 GB apiece at n_max = 891, and neither carries any information
+    beyond an (n_max+1, n_max+1) coefficient matrix restricted to the
+    plane i + j - k = 0.
+
+    That is what killed the m22 = 100, L_out_frac = 0.185 run: the fused
+    executable reported "temp 11.80 GiB", which is exactly 2 * 8 * 892^3,
+    and the module carrying it could no longer be loaded onto the device -
+    "Failed to load in-memory CUBIN ... CUDA_ERROR_OUT_OF_MEMORY" - even
+    with ~20 GiB free under the BFC limit, because a module load draws on
+    driver memory outside the pool.
+
+    Selecting that plane inside the loop instead costs one (n_max+1)^2
+    mask per iteration - 6.4 MB at n_max = 891, against the
+    (n_max+1, n_max+1, n_points) working set the recurrence already
+    carries - so the table scales as n_max^2, not n_max^3.
+
+    Only the is_normalized=True branch is reproduced; it is the only one
+    compute_Ylm_and_dtheta_jit ever asked for.
+    """
+    n_points = x.shape[0]
+    table_width = n_max + 1
+
+    p = jnp.zeros((table_width, table_width, n_points), dtype=x.dtype)
+
+    a_idx = jnp.arange(1, n_max + 1, dtype=x.dtype)
+    b_idx = jnp.arange(n_max, dtype=x.dtype)
+    initial_value = 0.5 / jnp.sqrt(jnp.pi)          # p(0, 0)
+    f_a = jnp.cumprod(-1 * jnp.sqrt(1.0 + 0.5 / a_idx))
+    f_b = jnp.sqrt(2.0 * b_idx + 3.0)
+
+    p = p.at[(0, 0)].set(initial_value)
+
+    # Diagonal entries p(l, l).
+    y = jnp.cumprod(
+        jnp.broadcast_to(jnp.sqrt(1.0 - x * x), (n_max, n_points)), axis=0)
+    # jnp.einsum, not the equivalent-looking broadcast multiply: einsum
+    # lowers these through dot_general, which rounds differently from an
+    # elementwise multiply, and keeping them makes this table bit-identical
+    # to the JAX original rather than merely equal to ~1e-16.
+    p_diag = initial_value * jnp.einsum('i,ij->ij', f_a, y)
+    diag_indices = jnp.diag_indices(table_width)
+    p = p.at[(diag_indices[0][1:], diag_indices[1][1:])].set(p_diag)
+
+    # First off-diagonal, from the diagonal.
+    p_offdiag = jnp.einsum('ij,ij->ij',
+                           jnp.einsum('i,j->ij', f_b, x),
+                           p[jnp.diag_indices(n_max)])
+    offdiag_indices = (diag_indices[0][:n_max], diag_indices[1][:n_max] + 1)
+    p = p.at[offdiag_indices].set(p_offdiag)
+
+    # Two-term recurrence coefficients, (order, degree). Only the strict
+    # upper triangles are meaningful - the expressions divide by
+    # l^2 - m^2, which is zero on the diagonal - so everything else stays
+    # at exactly zero, as in the JAX original.
+    m_mat, l_mat = jnp.meshgrid(
+        jnp.arange(table_width, dtype=x.dtype),
+        jnp.arange(table_width, dtype=x.dtype),
+        indexing='ij')
+    c0 = l_mat * l_mat
+    c1 = m_mat * m_mat
+    c2 = 2.0 * l_mat
+    c3 = (l_mat - 1.0) * (l_mat - 1.0)
+    d0 = jnp.sqrt((4.0 * c0 - 1.0) / (c0 - c1))
+    d1 = jnp.sqrt(((c2 + 1.0) * (c3 - c1)) / ((c2 - 3.0) * (c0 - c1)))
+
+    d_zeros = jnp.zeros((table_width, table_width), dtype=x.dtype)
+    d0_indices = jnp.triu_indices(table_width, 1)
+    d1_indices = jnp.triu_indices(table_width, 2)
+    d0_mask = d_zeros.at[d0_indices].set(d0[d0_indices])
+    d1_mask = d_zeros.at[d1_indices].set(d1[d1_indices])
+
+    # The plane the 3D masks encoded: at iteration i, only the entries with
+    # degree = order + i contribute. Built per iteration from these two
+    # (table_width, 1) / (1, table_width) index vectors.
+    order_index = jnp.arange(table_width)[:, None]
+    degree_index = jnp.arange(table_width)[None, :]
+
+    p = p.astype(jnp.result_type(p.dtype, x.dtype, d0_mask.dtype))
+
+    def body_fun(i, p_val):
+        on_plane = (order_index + i - degree_index) == 0
+        coeff_0 = jnp.where(on_plane, d0_mask, 0.0)
+        coeff_1 = jnp.where(on_plane, d1_mask, 0.0)
+
+        h = (jnp.einsum('ij,ijk->ijk',
+                        coeff_0,
+                        jnp.einsum('ijk,k->ijk',
+                                   jnp.roll(p_val, shift=1, axis=1), x))
+             - jnp.einsum('ij,ijk->ijk', coeff_1, jnp.roll(p_val, shift=2, axis=1)))
+        return p_val + h
+
+    if n_max > 1:
+        p = jax.lax.fori_loop(2, n_max + 1, body_fun, p)
+
+    return p
+
+
 @functools.partial(jax.jit, static_argnames=("n_max",))
 def compute_Ylm_and_dtheta_jit(lm_pairs, theta_arr, phi_arr, n_max):
     """
@@ -494,10 +600,15 @@ def compute_Ylm_and_dtheta_jit(lm_pairs, theta_arr, phi_arr, n_max):
     of that broadcast theta is identical for a given particle.
 
     Fix: build the Legendre table ourselves at the true (n_particles,)
-    shape - (n_max+1, n_max+1, n_particles), a few MB - then gather out
-    exactly the (l, m, particle) triples needed. A single JVP with
-    respect to theta gives the theta-derivative in the same pass, with no
-    second evaluation.
+    shape - (n_max+1, n_max+1, n_particles) - then gather out exactly the
+    (l, m, particle) triples needed. A single JVP with respect to theta
+    gives the theta-derivative in the same pass, with no second
+    evaluation.
+
+    The table comes from normalised_legendre_table above, not from JAX's
+    _gen_associated_legendre: same recurrence, same values to the bit, but
+    without the two dense (n_max+1)^3 coefficient masks the JAX one builds
+    on the way, which are 5.7 GB *each* at n_max = 891. See that function.
 
     Inputs
     ------
@@ -521,7 +632,7 @@ def compute_Ylm_and_dtheta_jit(lm_pairs, theta_arr, phi_arr, n_max):
     is_negative_m = (m_values < 0)[:, None]
 
     def Y_at_theta(theta):
-        legendre_table = _gen_associated_legendre(n_max, jnp.cos(theta), True)   # (n_max+1, n_max+1, n_particles)
+        legendre_table = normalised_legendre_table(n_max, jnp.cos(theta))        # (n_max+1, n_max+1, n_particles)
         legendre_values = legendre_table[abs_m_values, l_values, :]              # (n_modes, n_particles)
 
         Y_for_positive_m = legendre_values * azimuthal_phase

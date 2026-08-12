@@ -10,6 +10,8 @@ would be wasteful to serialise.
 import os
 import pickle
 
+import numpy as np
+
 
 class Checkpoint_manager:
 
@@ -99,6 +101,17 @@ class Checkpoint_manager:
             'stellar_v_disp': list(p.stellar_v_disp),
             'average_r': list(p.average_r),
             'time_step': p.time_step,
+            # Timesteps between consecutive kinetic_energy / potential_energy /
+            # ang_mom entries - those three are recorded on Master_sim's
+            # poten_every cadence, everything else once per step. Entry k of
+            # them is timestep k * energy_every.
+            'energy_every': p.energy_every,
+            # Running velocity-dispersion state, so a resumed run continues the
+            # same accumulation rather than restarting it from the current
+            # velocity (see Particles.update_state).
+            'v_disp_count': p._v_disp_count,
+            'v_disp_mean': p._v_disp_mean.copy(),
+            'v_disp_m2': p._v_disp_m2.copy(),
         }
 
     @staticmethod
@@ -118,3 +131,14 @@ class Checkpoint_manager:
         particle.stellar_v_disp = state['stellar_v_disp']
         particle.average_r = state['average_r']
         particle.time_step = state['time_step']
+
+        # .get(), not [] - checkpoints written before these existed should
+        # still load. The fallbacks reproduce the old behaviour: one energy
+        # entry per step, and a dispersion accumulation restarted from the
+        # current velocity.
+        particle.energy_every = state.get('energy_every', 1)
+        particle._v_disp_count = state.get('v_disp_count', 1)
+        particle._v_disp_mean = np.asarray(
+            state.get('v_disp_mean', particle.v_sph), dtype=float).copy()
+        particle._v_disp_m2 = np.asarray(
+            state.get('v_disp_m2', np.zeros(3)), dtype=float).copy()

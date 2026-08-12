@@ -856,9 +856,16 @@ a_phi   = jnp.sum(-phi_lm_T * dY_dphi / (particle_r[None,:]
       'it `(Nmodes,)` mode indices and `(Np,)` angles forces θ to be broadcast up to '
       '`(Nmodes,)` per star; internally it then allocates an associated-Legendre cube of shape '
       '`(n_max+1, n_max+1, Nmodes)`. At `L_max = 481` that is ~430 GiB per star. The fix is to '
-      'call `_gen_associated_legendre` directly with `cos θ` of shape `(Np,)` — a ~9 MiB table — '
+      'build the Legendre table directly at `cos θ` of shape `(Np,)` — a ~9 MiB table — '
       'then gather `legendre[|m|, l, p]`, multiply by `exp(i|m|φ_p)`, and apply the `m < 0` '
       'sign correction. `dY/dθ` comes from a JVP with tangent 1 in θ, so one pass gives both.'),
+('P', 'That table comes from `MSS.normalised_legendre_table`, not from JAX\'s '
+      '`_gen_associated_legendre`, even though the recurrence is the same one and the values are '
+      'identical to the bit. The JAX version materialises its per-iteration coefficients as two '
+      'dense `(n_max+1, n_max+1, n_max+1)` masks — 5.7 GB *each* at `n_max = 891`, and neither '
+      'holds anything beyond an `(n_max+1)²` matrix restricted to the plane `i + j - k = 0`. '
+      'Selecting that plane inside the loop instead makes the table scale as `n_max²`, and drops '
+      '10.6 GiB of temp buffer out of the fused acceleration kernel.'),
 ]
 
 # ============================================================ Part VII: main loop

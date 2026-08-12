@@ -43,7 +43,8 @@ def _affine_prefix_scan(weights, addends, axis=1):
 class Phi_lm_Builder:
 
     def __init__(self, sim_init, rho_builder, l_band_size, plot=False,
-                 use_merged_solver=True, chunk_batch_size=None):
+                 use_merged_solver=True, chunk_batch_size=None,
+                 particle_batch_size=None):
 
         self.sim_init = sim_init
         self.rho_builder = rho_builder
@@ -62,6 +63,25 @@ class Phi_lm_Builder:
         # the merged solve runs out of memory; see the note at the lax.map
         # call for what one batch slot costs.
         self.chunk_batch_size = chunk_batch_size
+
+        # How many particles are solved per pass. The whole per-particle
+        # working set scales with this: rho_lm_at_particles alone is
+        # (n_particles, L_max_out, 2*L_max_out - 1), 12.7 GB at 1000
+        # particles and L_max_out = 892, and three of them are live while the
+        # static and full densities are blended. Batching bounds all of that
+        # at the batch size instead of the particle count.
+        #
+        # None = one pass over every particle, i.e. exactly the behaviour
+        # before this knob existed. Note the trade: the merged solver inserts
+        # each pass's particle radii into the shared radial grid as extra
+        # quadrature knots, so a batched run integrates on a slightly coarser
+        # grid than an unbatched one and the results shift a little. That is
+        # the same class of difference as merged-vs-per-particle (see
+        # use_merged_solver above), not a correctness break - but it does mean
+        # results depend on this value, so keep it fixed across a run and its
+        # restarts.
+        self.particle_batch_size = (
+            None if particle_batch_size is None else int(particle_batch_size))
 
         # Chunk size for the (l, m) loop inside the Poisson solve - caps
         # its per-particle intermediate at (l_band_size, n_radii + 1)
@@ -314,42 +334,116 @@ class Phi_lm_Builder:
 
 
 
-    def calc_rho_lm_at_parts_and_call_insert(self, positions_sph, current_phase, rho_lms, ramp_frac, sparse_au_j=None):
+    def _solve_in_particle_batches(self, positions_sph, solve_batch):
+        """
+        Runs `solve_batch` over the particles `particle_batch_size` at a time
+        and stitches the (n_particles, n_modes) results back together.
+
+        Everything on the per-particle path scales linearly with how many
+        particles are in flight at once - the s2fft working set inside
+        rho_lm_at_particles, the (n_particles, L_max_out, 2*L_max_out - 1)
+        densities, R_j_at_particles at (n_particles, n_radial_modes) - and
+        none of it is sharded. Batching bounds all of it at once.
+
+        particle_batch_size = None runs a single batch, which is exactly what
+        this path did before the knob existed.
+
+        Whatever solve_batch returns is stitched back along the particle axis,
+        shape-agnostically. That matters for per_batch_reduce (see the
+        solvers): a solve_batch that has already contracted the mode axis away
+        returns (batch,) per output and stitches to (n_particles,), and the
+        full-width (batch, n_modes) arrays never exist at (n_particles,
+        n_modes). Those are 11.86 GiB each at L_max_out = 892 and 1000
+        particles, and holding both is what left no room on the device in job
+        661385.
+        """
+        n_particles, n_columns = positions_sph.shape
+
+        batch = self.particle_batch_size
+        batch = n_particles if not batch else max(1, min(int(batch), n_particles))
+
+        n_batches = (n_particles + batch - 1) // batch
+        if n_batches == 1:
+            return solve_batch(positions_sph)
+
+        n_particles_padded = n_batches * batch
+        pad_amount = n_particles_padded - n_particles
+
+        # Pad by repeating the last particle rather than with zeros: a zero
+        # radius would divide by zero in the solvers' 1/r factors, and would
+        # put a spurious quadrature knot at the origin of the merged grid. A
+        # duplicated radius only adds a zero-width interval, which both
+        # solvers already tolerate.
+        if pad_amount > 0:
+            positions_sph = jnp.concatenate(
+                [positions_sph,
+                 jnp.repeat(positions_sph[-1:], pad_amount, axis=0)], axis=0)
+
+        # Default batch_size (None) makes this a scan, so one batch's working
+        # set is live at a time - the point of the exercise.
+        results = jax.lax.map(
+            solve_batch, positions_sph.reshape(n_batches, batch, n_columns))
+
+        return jax.tree.map(
+            lambda a: a.reshape((n_particles_padded,) + a.shape[2:])[:n_particles],
+            results,
+        )
+
+    def calc_rho_lm_at_parts_and_call_insert(self, positions_sph, current_phase, rho_lms, ramp_frac,
+                                             amplitudes=None, eigenmode_params=None,
+                                             per_batch_reduce=None):
         """
         JIT-compilable: evaluates rho_lm at every particle's exact radius
         (blended between the static and full time-dependent density), then
         inserts each particle and solves for phi_lm in one vmapped call.
+
+        Particles are processed `particle_batch_size` at a time. Each one is
+        inserted into the background grid on its own here, so the batching
+        changes nothing about the result - only how many are in flight.
+
+        per_batch_reduce, if given, is called as
+        (dphi_batch, phi_batch, positions_batch) inside the batch loop and its
+        result is what gets stitched together instead. See the note on the
+        merged solver's copy of this argument.
+
+        eigenmode_params is forwarded to R_j_at_radii, and a jitted caller
+        should pass it - see that method for what closing over it costs.
         """
         rho_builder = self.rho_builder
         phase_c = current_phase.astype(rho_builder.compute_dtype)
 
-        particle_radii = positions_sph[:, 0]
-        R_j_at_particles = rho_builder.R_j_at_radii(particle_radii)
+        def solve_batch(positions_batch):
+            particle_radii = positions_batch[:, 0]
+            R_j_at_particles = rho_builder.R_j_at_radii(particle_radii, eigenmode_params)
 
-        # Compute rho_lm at every particle's radius OUTSIDE the vmap over
-        # particles, so the expensive sparse matmul + scatter happen once
-        # per call, not once per particle.
-        rho_lm_at_particles_full = rho_builder.rho_lm_at_particles(R_j_at_particles, phase_c)
-        rho_lm_at_particles_static = rho_builder.rho_lm_at_particles_diagonal_only(R_j_at_particles)
+            # Compute rho_lm at every particle's radius OUTSIDE the vmap over
+            # particles, so the expensive sparse matmul + scatter happen once
+            # per batch, not once per particle.
+            rho_lm_at_particles_full = rho_builder.rho_lm_at_particles(
+                R_j_at_particles, phase_c, amplitudes)
+            rho_lm_at_particles_static = rho_builder.rho_lm_at_particles_diagonal_only(R_j_at_particles)
 
-        rho_lm_at_particles = (
-            rho_lm_at_particles_static
-            + ramp_frac * (rho_lm_at_particles_full - rho_lm_at_particles_static)
-        )
-        # rho_lm_at_particles : (n_particles, L_max_out, 2*L_max_out - 1)
+            rho_lm_at_particles = (
+                rho_lm_at_particles_static
+                + ramp_frac * (rho_lm_at_particles_full - rho_lm_at_particles_static)
+            )
+            # rho_lm_at_particles : (batch, L_max_out, 2*L_max_out - 1)
 
-        # Vmap over all particles in one batch rather than looping over them
-        # one at a time. Unlike the l/m chunk count above, n_particles doesn't
-        # grow with m22 (it's set directly by no_of_particles), so batching
-        # the full particle axis stays memory-safe regardless of m22.
-        dphi_lm_dr_at_parts, phi_lm_at_parts = jax.lax.map(
-            lambda inp: self.insert_particle_rholm_and_get_philm(inp[0], inp[1], rho_lms),
-            (positions_sph, rho_lm_at_particles),
-            batch_size=positions_sph.shape[0],
-        )
-        # dphi_lm_dr_at_parts, phi_lm_at_parts : (n_particles, n_modes) each
+            # Vmap over the batch's particles rather than looping over them
+            # one at a time.
+            dphi_batch, phi_batch = jax.lax.map(
+                lambda inp: self.insert_particle_rholm_and_get_philm(inp[0], inp[1], rho_lms),
+                (positions_batch, rho_lm_at_particles),
+                batch_size=positions_batch.shape[0],
+            )
+            # each: (batch, n_modes)
 
-        return dphi_lm_dr_at_parts, phi_lm_at_parts
+            if per_batch_reduce is None:
+                return dphi_batch, phi_batch
+
+            return per_batch_reduce(dphi_batch, phi_batch, positions_batch)
+
+        return self._solve_in_particle_batches(positions_sph, solve_batch)
 
     # ------------------------------------------------------------------
     # Merged-grid Poisson solve (experimental alternative to the two
@@ -576,7 +670,9 @@ class Phi_lm_Builder:
         return dphi.T, phi.T
 
     def calc_rho_lm_at_parts_and_call_insert_merged(self, positions_sph, current_phase,
-                                                    rho_lms, ramp_frac, sparse_au_j=None):
+                                                    rho_lms, ramp_frac, amplitudes=None,
+                                                    eigenmode_params=None,
+                                                    per_batch_reduce=None):
         """
         Drop-in alternative to `calc_rho_lm_at_parts_and_call_insert` that
         solves every particle from one merged radial grid.
@@ -591,25 +687,62 @@ class Phi_lm_Builder:
         merged grid carries n_particles extra quadrature knots, so the
         trapezoidal sums differ slightly. It should be the more accurate
         of the two.
+
+        Particles are processed `particle_batch_size` at a time. Here that is
+        not free: only the current batch's radii go into the merged grid, so a
+        batched run integrates on a coarser grid than an unbatched one. The
+        difference is the same kind as merged-vs-per-particle above (a
+        quadrature refinement, not a different physical field), but it does
+        mean the batch size is part of the run's configuration.
+
+        per_batch_reduce
+        ----------------
+        If given, called as (dphi_batch, phi_batch, positions_batch) at the end
+        of each batch, and its result is stitched along the particle axis
+        instead of the raw (batch, n_modes) arrays.
+
+        Acceleration_Calculator passes the angular contraction here, so the
+        (n_particles, n_modes) arrays are never built: they are 11.86 GiB each
+        in complex128 at L_max_out = 892 and 1000 particles, they were only
+        ever an intermediate on the way to (n_particles,) accelerations, and
+        holding both is what left the device with no room to load a kernel in
+        job 661385. It also means one knob - particle_batch_size - now sizes
+        both halves of the calculation, which is the intent.
+
+        eigenmode_params
+        ----------------
+        Forwarded to R_j_at_radii. A jitted caller should pass it rather than
+        let it be read off self: it is the single largest array in the run
+        (28.13 GB at m22 = 100) and closing over it bakes the whole thing
+        into the executable as a constant. See R_j_at_radii.
         """
         rho_builder = self.rho_builder
         phase_c = current_phase.astype(rho_builder.compute_dtype)
 
-        particle_radii = positions_sph[:, 0]
-        R_j_at_particles = rho_builder.R_j_at_radii(particle_radii)
+        def solve_batch(positions_batch):
+            particle_radii = positions_batch[:, 0]
+            R_j_at_particles = rho_builder.R_j_at_radii(particle_radii, eigenmode_params)
 
-        rho_lm_at_particles_full = rho_builder.rho_lm_at_particles(R_j_at_particles, phase_c)
-        rho_lm_at_particles_static = rho_builder.rho_lm_at_particles_diagonal_only(R_j_at_particles)
+            rho_lm_at_particles_full = rho_builder.rho_lm_at_particles(
+                R_j_at_particles, phase_c, amplitudes)
+            rho_lm_at_particles_static = rho_builder.rho_lm_at_particles_diagonal_only(R_j_at_particles)
 
-        rho_lm_at_particles = (
-            rho_lm_at_particles_static
-            + ramp_frac * (rho_lm_at_particles_full - rho_lm_at_particles_static)
-        )
+            rho_lm_at_particles = (
+                rho_lm_at_particles_static
+                + ramp_frac * (rho_lm_at_particles_full - rho_lm_at_particles_static)
+            )
 
-        return self.compute_phi_lm_and_deriv_merged(
-            rho_lms, rho_lm_at_particles,
-            self.sim_init.r, particle_radii,
-            self.output_lm_pairs, int(self.sim_init.L_max_out),
-            self.sim_init.G, self.l_band_size,
-            self.chunk_batch_size,
-        )
+            dphi_batch, phi_batch = self.compute_phi_lm_and_deriv_merged(
+                rho_lms, rho_lm_at_particles,
+                self.sim_init.r, particle_radii,
+                self.output_lm_pairs, int(self.sim_init.L_max_out),
+                self.sim_init.G, self.l_band_size,
+                self.chunk_batch_size,
+            )
+
+            if per_batch_reduce is None:
+                return dphi_batch, phi_batch
+
+            return per_batch_reduce(dphi_batch, phi_batch, positions_batch)
+
+        return self._solve_in_particle_batches(positions_sph, solve_batch)

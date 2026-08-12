@@ -1,6 +1,6 @@
 import os
+
 import jax
-print(jax.devices())
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import numpy as np
@@ -8,18 +8,23 @@ import pandas as pd
 import rebound
 
 import Maths_funcs as MF
+import Memory_speed_savers as MSS
 import Particles as Part
-
 
 
 class SimInit:
 
-    def __init__(self, m22, r_min, r_max_enclosing_frac, no_radius_bins):
+    def __init__(self, m22, r_min, r_max_enclosing_frac, no_radius_bins, r_cut_kpc=None):
 
         self.m22 = m22
         self.r_min = r_min
         self.r_max_enclosing_frac = r_max_enclosing_frac
         self.no_radius_bins = no_radius_bins
+
+        # Outer radius, in kpc, beyond which the background rho_lm / phi_lm
+        # grid is simply not built. None keeps the full r_max_enclosing_frac
+        # grid. See Truncate_radial_grid for why this is cheap and safe.
+        self.r_cut_kpc = r_cut_kpc
 
         cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "precomputed_wf")
         os.makedirs(cache_dir, exist_ok=True)
@@ -73,63 +78,145 @@ class SimInit:
         # Background radial grid the rest of the initialisation interpolates on.
         self.r = jnp.logspace(jnp.log10(self.rmin), jnp.log10(self.rmax), self.no_radius_bins)
 
-        objs = pd.read_pickle(self.pkl_fname)
+        # Unpickling a jax.Array is a device_put to the *default* device, so
+        # every leaf of the eigenstate library would land on GPU 0. At
+        # m22 = 100 the two spline tables are float64 and 23.4 GB each - 47 GB
+        # on one GPU, before Prune_radial_modes has dropped the 40% of radial
+        # modes the L cut kills, and none of it is ever freed back to the
+        # driver because XLA_PYTHON_CLIENT_PREALLOCATE is false. Read it onto
+        # the CPU device instead: the prune below is a host-side gather
+        # anyway, so only the pruned, sharded result needs to reach a GPU.
+        with jax.default_device(jax.devices('cpu')[0]):
+            objs = pd.read_pickle(self.pkl_fname)
         self.radial_eigenmode_params = objs['eigenstate_lib'].radial_eigenmode_params
 
         self.R_j_r = R_j_r
 
-        return R_j_r, self.radial_eigenmode_params
+        # Drop the outer radii before anything downstream sizes itself off
+        # len(self.r) / R_j_r.shape[0].
+        self.Truncate_radial_grid()
 
-    def precompute_lm_pairs(self, l):
+        return self.R_j_r, self.radial_eigenmode_params
 
-        l = np.asarray(l)
-        n_j = l.shape[0]
-        n_per_j = (2 * l + 1).astype(np.int64)
-        total_k = int(n_per_j.sum())
+    def Truncate_radial_grid(self):
+        """
+        Cuts the background radial grid (and R_j_r with it) at r_cut_kpc.
+        """
 
-        # j-index and l for every k-mode (each j contributes 2l+1 k-modes,
-        # m = -l..l).
-        ind_for_jmode_over_all_k = np.repeat(np.arange(n_j, dtype=np.int32), n_per_j)
-        l_for_kmode = np.repeat(l, n_per_j).astype(np.int32)
+        if self.r_cut_kpc is None:
+            print(f"No r_cut set - keeping the full radial grid out to {self.rmax * self.u.to_Kpc:.3g} kpc ({self.no_radius_bins} bins).")
+            self.n_radii = int(self.r.shape[0])
+            return
 
-        block_start = np.cumsum(n_per_j) - n_per_j
-        within_block = np.arange(total_k, dtype=np.int64) - np.repeat(block_start, n_per_j)
-        m_for_kmode = (within_block - l_for_kmode).astype(np.int32)
+        r_cut = float(self.r_cut_kpc) * self.u.from_Kpc
 
-        # Unique (l, m) pairs only depend on which l values occur (<= l_max+1
-        # of them), not on how many j's share each l, so build them directly
-        # instead of de-duplicating the full total_k-length k-mode table.
-        unique_l = np.unique(l).astype(np.int64)
-        n_per_unique_l = 2 * unique_l + 1
-        pair_block_start = np.cumsum(n_per_unique_l) - n_per_unique_l
-        lm_pairs_l = np.repeat(unique_l, n_per_unique_l)
-        within_pair_block = np.arange(lm_pairs_l.shape[0], dtype=np.int64) - np.repeat(pair_block_start, n_per_unique_l)
-        lm_pairs_m = within_pair_block - lm_pairs_l
-        lm_pairs_np = np.stack([lm_pairs_l, lm_pairs_m], axis=1).astype(np.int32)
+        if r_cut <= self.rmin:
+            raise ValueError(
+                f"r_cut_kpc={self.r_cut_kpc} is at or inside the grid's inner radius "
+                f"({self.rmin * self.u.to_Kpc:.3g} kpc) - nothing would be left.")
 
-        # Index into lm_pairs_np for every k-mode: that l's block start, plus
-        # position within the block (m - (-l) = m + l).
-        l_to_block_start = np.zeros(int(unique_l.max()) + 1, dtype=np.int64)
-        l_to_block_start[unique_l] = pair_block_start
-        lm_pairs_idx_for_kmode = (
-            l_to_block_start[l_for_kmode] + (m_for_kmode.astype(np.int64) + l_for_kmode)
-        ).astype(np.int32)
+        if r_cut >= self.rmax:
+            print(f"r_cut_kpc={self.r_cut_kpc} is beyond the grid's outer radius ({self.rmax * self.u.to_Kpc:.3g} kpc) - no truncation applied.")
+            self.n_radii = int(self.r.shape[0])
+            return
 
-        L = int(l.max()) + 1
-        L_max_out = 2 * L - 1
-        n_theta = L_max_out
-        n_phi = 2 * L_max_out - 1
+        r_np = np.asarray(self.r)
+        n_keep = int(np.searchsorted(r_np, r_cut, side='right'))
 
-        i = np.arange(n_theta)
-        theta_np = (np.pi * (2 * i + 1)) / (2 * L_max_out - 1)
-        j = np.arange(n_phi)
-        phi_np = (2 * np.pi * j) / (2 * L_max_out - 1)
+        # build_sphht_rho_lms_jit pads the radial axis up to a whole number of
+        # r_chunk_size chunks anyway, so rounding up to that boundary buys a
+        # few extra *real* radii for exactly the memory and compute the
+        # padding would otherwise waste on zero rows.
+        r_chunk = int(getattr(self, 'r_chunk_size', 0) or 0)
+        if r_chunk > 0:
+            n_keep = int(np.ceil(n_keep / r_chunk) * r_chunk)
 
-        return (jnp.asarray(ind_for_jmode_over_all_k), jnp.asarray(lm_pairs_np),
-                jnp.asarray(l_for_kmode), jnp.asarray(m_for_kmode),
-                jnp.asarray(theta_np), jnp.asarray(phi_np),
-                jnp.asarray(lm_pairs_idx_for_kmode))
+        n_keep = int(np.clip(n_keep, 2, r_np.shape[0]))
 
+        self.r = self.r[:n_keep]
+        # Materialise the slice so the full-length array can be freed rather
+        # than kept alive by a view.
+        self.R_j_r = np.ascontiguousarray(np.asarray(self.R_j_r)[:n_keep])
+        self.n_radii = n_keep
+
+        print(f"Radial grid truncated at r_cut = {self.r_cut_kpc:g} kpc: "
+              f"{n_keep} / {r_np.shape[0]} bins kept "
+              f"({100.0 * n_keep / r_np.shape[0]:.1f}%), "
+              f"outermost radius now {float(self.r[-1]) * self.u.to_Kpc:.3g} kpc "
+              f"(full grid reached {self.rmax * self.u.to_Kpc:.3g} kpc).")
+
+    def Prune_radial_modes(self):
+        """
+        Drops every radial eigenmode j whose angular momentum l_j is at or
+        above L_max_out.
+        """
+
+        l_full = np.asarray(self.l)
+        n_full = int(l_full.shape[0])
+
+        keep = np.flatnonzero(l_full < self.L_max_out)
+        n_keep = int(keep.shape[0])
+
+        if n_keep == 0:
+            raise ValueError(
+                f"Radial-mode pruning would drop every mode: L_max_out={self.L_max_out} "
+                f"is at or below the smallest l in the library ({int(l_full.min())}).")
+
+        dropping_modes = n_keep != n_full
+
+        if dropping_modes:
+            self.l = l_full[keep]
+            self.aj_2 = np.asarray(self.aj_2)[keep]
+            self.eigen_energies = self.eigen_energies[keep]
+            self.R_j_r = np.ascontiguousarray(np.asarray(self.R_j_r)[:, keep])
+        else:
+            print(f"Radial-mode pruning: nothing to drop, all {n_full} modes have l < L_max_out.")
+
+        # Every leaf of radial_eigenmode_params is indexed by radial mode on
+        # its leading axis - that is exactly what R_j_at_radii's
+        # vmap(..., in_axes=(None, 0)) maps over - so pruning them all keeps
+        # the whole (nested) NamedTuple consistent.
+        #
+        # The library arrives on the host (see Load_files), so the gather runs
+        # here and only the kept modes are uploaded - sharded across the
+        # devices on that same radial-mode axis, so each one evaluates its own
+        # modes. At m22 = 100 that is 28 GB of float64 spline tables split two
+        # ways rather than all of it on GPU 0. This loop runs even when
+        # nothing is dropped, because it is also what gets the library off the
+        # CPU device in the first place.
+        #
+        # Upload first, delete second: on the CPU backend np.asarray(leaf) can
+        # alias the array's own buffer, so releasing the leaf any earlier
+        # would leave the gather - or the device_put - reading freed memory.
+        # The old order (delete, then allocate) was there to keep the *device*
+        # peak down, which no longer applies now that the source is host RAM.
+        leaves, treedef = jax.tree_util.tree_flatten(self.radial_eigenmode_params)
+        pruned_leaves = []
+        for leaf in leaves:
+            host_leaf = np.asarray(leaf)
+            if dropping_modes:
+                host_leaf = host_leaf[keep]
+            pruned_leaves.append(self.sharding.shard_leading_axis_arr(host_leaf))
+            if isinstance(leaf, jax.Array) and not leaf.is_deleted():
+                leaf.delete()
+            del host_leaf
+        # Safe to drop the old tuple only now: nothing else holds a reference
+        # to it (Load_files' `objs` is local and already out of scope).
+        self.radial_eigenmode_params = jax.tree_util.tree_unflatten(treedef, pruned_leaves)
+
+        if dropping_modes:
+            print(f"Radial-mode pruning (l >= L_max_out={self.L_max_out}): "
+                  f"dropped {n_full - n_keep} of {n_full} radial modes "
+                  f"({100.0 * (n_full - n_keep) / n_full:.1f}%), {n_keep} kept.")
+
+        # The single largest thing on the GPUs, so say where it landed - a
+        # silent fallback to one device is what an OOM later looks like.
+        leaf_bytes = sum(leaf.nbytes for leaf in pruned_leaves)
+        n_dev = len(pruned_leaves[0].sharding.device_set)
+        placement = (f"{n_dev}-way sharded on the radial-mode axis, "
+                     f"{leaf_bytes / n_dev / 1e9:.2f} GB per device"
+                     if n_dev > 1 else "on a single device")
+        print(f"Eigenmode library uploaded: {leaf_bytes / 1e9:.2f} GB, {placement}.")
 
     def Truncating_L(self):
 
@@ -160,47 +247,6 @@ class SimInit:
 
         self.L_max_out = L_max_out
 
-
-    def Truncate_modes(self, L_max_out, L, parent_j, lm_l_per_mode, lm_m_per_mode, lm_idx_per_mode, lm_pairs):
-
-        if L_max_out < L:
-            lm_l_np = np.array(lm_l_per_mode)
-            k_mask = lm_l_np < L_max_out          # bool over k-modes
-
-            parent_j = parent_j[k_mask]
-            lm_l_per_mode = lm_l_per_mode[k_mask]
-            lm_m_per_mode = lm_m_per_mode[k_mask]
-            lm_idx_old = np.array(lm_idx_per_mode)[k_mask]
-
-            # Filter unique (l,m) pairs and rebuild the index mapping.
-            lm_pairs_np = np.array(lm_pairs)
-            pair_mask = lm_pairs_np[:, 0] < L_max_out
-            lm_pairs = lm_pairs[pair_mask]
-            remap = np.full(len(pair_mask), -1, dtype=np.int32)
-            remap[np.where(pair_mask)[0]] = np.arange(int(pair_mask.sum()), dtype=np.int32)
-            lm_idx_per_mode = jnp.array(remap[lm_idx_old], dtype=jnp.int32)
-
-            # Recompute the MW grid for the truncated bandwidth.
-            n_theta = L_max_out
-            n_phi = 2 * L_max_out - 1
-            theta = jnp.asarray((np.pi * (2 * np.arange(n_theta) + 1)) / n_phi)
-            phi = jnp.asarray((2 * np.pi * np.arange(n_phi)) / n_phi)
-
-            print(f"Mode mask (L_max_out={L_max_out} < L={L}): "
-                    f"dropped {int((~k_mask).sum())} k-modes and "
-                    f"{int((~pair_mask).sum())} unique (l,m) pairs with l >= {L_max_out}. "
-                    f"Remaining: {len(parent_j)} k-modes, {lm_pairs.shape[0]} unique pairs.")
-
-            self.theta = theta
-            self.phi = phi
-
-        self.parent_j = parent_j
-        self.lm_l_per_mode = lm_l_per_mode
-        self.lm_m_per_mode = lm_m_per_mode
-        self.lm_idx_per_mode = lm_idx_per_mode
-        self.lm_pairs = lm_pairs
-
-        return parent_j, lm_l_per_mode, lm_m_per_mode, lm_idx_per_mode, lm_pairs
 
     def Setup_rebound(self):
         
@@ -267,7 +313,7 @@ class SimInit:
         self.sim_particles = sim_particles
 
 
-    def Particle_ICs(self):
+    def Particle_ICs_Massless(self):
 
 
         rho_diag = self.Rho_lm_builder.initialise()
@@ -329,7 +375,7 @@ class SimInit:
 
             self.init_vels.append(v_mags[i])
 
-            print(f"Particle {i}: v_circ = {v_mags[i] * self.u.to_kms:.3f} km/s")
+            print(f"Particle {i}: v_circ = {v_mags[i] * self.u.to_kms:.6f} km/s")
 
             particle = Part.Simulation_Particle(i, init_pos[i], init_vel[i], self.u)
             self.particles.append(particle)
@@ -347,6 +393,8 @@ class SimInit:
         print(f"Mean r: {r_orbit_mean * self.u.to_Kpc:.3f} kpc")
     
     def Particle_ICs_Plummer(self, M_plummer, a_plummer):
+
+        self.particles = []
 
         key1 = jax.random.PRNGKey(42)
 
@@ -366,32 +414,35 @@ class SimInit:
 
         # Velocities
 
-        v_esc = jnp.sqrt(2 * self.G * M_plummer / jnp.sqrt(star_radii**2 + a_plummer**2))
+        # v_esc = jnp.sqrt(2 * self.G * M_plummer / jnp.sqrt(star_radii**2 + a_plummer**2))
 
-        get_x4 = []
+        # get_x4 = []
+
+        # i = 0
+
+        # while len(get_x4) < self.no_of_particles:
+
+        #     key2 = jax.random.PRNGKey(43 + i)
+
+        #     X = jax.random.uniform(key2, shape=(2,self.no_of_particles - len(get_x4)), minval=0.0, maxval=1.0)
+
+        #     X4 = X[0]
+        #     X5 = X[1]
+
+        #     def g(X):
+        #         return X**2 * (1 - X**2)**(7/2)
+
+        #     accepted = g(X4) > 0.1 * X5
+
+        #     get_x4.append(X4[accepted])
+
+        #     i += 1
+
+        # q = jnp.concatenate(get_x4)[:self.no_of_particles]
+        # v = q * v_esc
 
         i = 0
-
-        while len(get_x4) < self.no_of_particles:
-
-            key2 = jax.random.PRNGKey(43 + i)
-
-            X = jax.random.uniform(key2, shape=(2,self.no_of_particles - len(get_x4)), minval=0.0, maxval=1.0)
-
-            X4 = X[0]
-            X5 = X[1]
-
-            def g(X):
-                return X**2 * (1 - X**2)**(7/2)
-
-            accepted = g(X4) > 0.1 * X5
-
-            get_x4.append(X4[accepted])
-
-            i += 1
-
-        q = jnp.concatenate(get_x4)[:self.no_of_particles]
-        v = q * v_esc
+        v = jnp.ones(self.no_of_particles)
 
         key3 = jax.random.PRNGKey(44 + i)
 
@@ -404,34 +455,59 @@ class SimInit:
         vel_x = jnp.sqrt(v**2 - vel_z**2) * jnp.cos(2 * jnp.pi * X7)
         vel_y = jnp.sqrt(v**2 - vel_z**2) * jnp.sin(2 * jnp.pi * X7)
 
+        init_vels = jnp.stack([vel_x, vel_y, vel_z], axis=1)
+
+        init_vels_unit = init_vels / jnp.linalg.norm(init_vels, axis=1, keepdims=True)
+
         rho_diag = self.Rho_lm_builder.initialise()
 
-        # Cumulative enclosed mass M_enc(r) on the radial grid; interpolated
-        # per particle below. SSF.Enclosed_mass applies the 4π r² factor.
+        # # Cumulative enclosed mass M_enc(r) on the radial grid; interpolated
+        # # per particle below. SSF.Enclosed_mass applies the 4π r² factor.
         M_enc_arr = MF.Enclosed_mass(self.r, rho_diag)
 
-        M_enc_at_r = jnp.interp(star_radii, self.r, M_enc_arr)
+        r_inner_edge = self.r[0]
+        rho_core = rho_diag[0]
+        M_core = 4/3 * jnp.pi * rho_core * r_inner_edge**3
+
+        M_enc_at_r = jnp.interp(star_radii, self.r, M_enc_arr + M_core)
+        M_enc_at_r = jnp.where(star_radii < r_inner_edge,
+                               4/3 * jnp.pi * rho_core * star_radii**3,
+                               M_enc_at_r)
+
         v_circ_mag = jnp.sqrt(self.G * M_enc_at_r / star_radii)
 
-        r_unit_vec = jnp.stack([star_x, star_y, star_z], axis=1) / star_radii[:, None]
-
-        ref = jnp.where(jnp.abs(r_unit_vec[:, 2])[:, None] < 0.9,
-                        jnp.array([0., 0., 1.]),
-                        jnp.array([1., 0., 0.]))
-        o_i_unit = jnp.cross(r_unit_vec, ref)
-        o_i_unit = o_i_unit / jnp.linalg.norm(o_i_unit, axis=1, keepdims=True)
-
-        t_i_unit = jnp.cross(r_unit_vec, o_i_unit)
-
-        b_i_unit = jnp.cross(t_i_unit, r_unit_vec)
-
-        rand_theta = jax.random.uniform(jax.random.PRNGKey(45 + i), shape=(self.no_of_particles,), minval=0.0, maxval=2 * jnp.pi,)
-
-        v_i_unit = t_i_unit * jnp.sin(rand_theta)[:, None] + b_i_unit * jnp.cos(rand_theta)[:, None]
+        init_vel = v_circ_mag[:, None] * init_vels_unit
 
         init_pos = jnp.stack([star_x, star_y, star_z], axis=1)
 
-        init_vel = v_circ_mag[:, None] * v_i_unit
+        # rho_diag = self.Rho_lm_builder.initialise()
+
+        # # Cumulative enclosed mass M_enc(r) on the radial grid; interpolated
+        # # per particle below. SSF.Enclosed_mass applies the 4π r² factor.
+        # M_enc_arr = MF.Enclosed_mass(self.r, rho_diag)
+
+        # M_enc_at_r = jnp.interp(star_radii, self.r, M_enc_arr)
+        # v_circ_mag = jnp.sqrt(self.G * M_enc_at_r / star_radii)
+
+        # r_unit_vec = jnp.stack([star_x, star_y, star_z], axis=1) / star_radii[:, None]
+
+        # ref = jnp.where(jnp.abs(r_unit_vec[:, 2])[:, None] < 0.9,
+        #                 jnp.array([0., 0., 1.]),
+        #                 jnp.array([1., 0., 0.]))
+        # o_i_unit = jnp.cross(r_unit_vec, ref)
+        # o_i_unit = o_i_unit / jnp.linalg.norm(o_i_unit, axis=1, keepdims=True)
+
+        # t_i_unit = jnp.cross(r_unit_vec, o_i_unit)
+
+        # b_i_unit = jnp.cross(t_i_unit, r_unit_vec)
+
+        # rand_theta = jax.random.uniform(jax.random.PRNGKey(1000), shape=(self.no_of_particles,), minval=0.0, maxval=2 * jnp.pi,)
+
+        # v_i_unit = t_i_unit * jnp.sin(rand_theta)[:, None] + b_i_unit * jnp.cos(rand_theta)[:, None]
+
+        # init_pos = jnp.stack([star_x, star_y, star_z], axis=1)
+
+        # init_vel = v_circ_mag[:, None] * v_i_unit
 
         return init_pos, init_vel
 
@@ -439,22 +515,29 @@ class SimInit:
 
     def set_dt(self):
 
-        orbital_P = 2 * jnp.pi * self.r_orbits / jnp.array(self.init_vels)
+        init_vels = jnp.asarray(self.init_vels)
 
-        min_orbital_P = jnp.min(orbital_P)
+        v_max = jnp.max(init_vels)
 
-        alive_j = jnp.unique(self.parent_j)          # eigenstates still in psi after the cut
-        min_psi_t = jnp.min(-1 / self.eigen_energies[alive_j])
+        # The de Broglie wavelength is therefore just 2*pi/v — m22 is already absorbed into
+        # the unit system and must not appear again here.
+        lambda_db = 2 * jnp.pi / jnp.mean(init_vels)
 
+        # Time for the fastest particle to cross one granule.
+        t_cross = lambda_db / v_max
 
-        print(f"Min T_orb: {min_orbital_P * self.u.to_Myr:.3f} Myr")
-        print(f"T_c: {min_psi_t * self.u.to_Myr:.3f} Myr")
+        # Fastest beat in psi: the largest pairwise |E_j - E_k| over the
+        # eigenstates still alive after the L cut, which is just the spectral
+        # range of that subset. Prune_radial_modes has already dropped
+        # everything above the cut, so that is every mode still here.
+        energies = jnp.asarray(self.eigen_energies)
+        max_dE = jnp.max(energies) - jnp.min(energies)
+        t_beat = 2 * jnp.pi / max_dE
 
-        new_dt_orb = min_orbital_P / self.dt_override
+        print(f"lambda_dB crossing time: {t_cross * self.u.to_Myr:.3f} Myr")
+        print(f"Fastest beat period T_c: {t_beat * self.u.to_Myr:.3f} Myr")
 
-        new_dt_c = min_psi_t / self.dt_override
-
-        new_dt = min(new_dt_orb, new_dt_c)
+        new_dt = jnp.minimum(t_cross, t_beat) / self.dt_override
 
         self.sim.dt = float(new_dt)
 
@@ -464,6 +547,7 @@ class SimInit:
 
         print(f"dt: {self.dt * self.u.to_Gyr:.3f} Gyr")
         print(f"Number of time steps: {self.no_time_steps}")
+
     
     def Number_of_ramp_steps(self):
         
@@ -480,26 +564,28 @@ class SimInit:
 
         self.R_j_r, self.radial_eigenmode_params = self.Load_files()
 
-        (parent_j, lm_pairs, lm_l_per_mode, lm_m_per_mode, theta, phi, lm_idx_per_mode) = self.precompute_lm_pairs(self.l)
-
-        self.parent_j = parent_j
-        self.lm_pairs = lm_pairs
-        self.lm_l_per_mode = lm_l_per_mode
-        self.lm_m_per_mode = lm_m_per_mode
-        self.lm_idx_per_mode = lm_idx_per_mode
-        self.theta = theta
-        self.phi = phi
-
+        # Truncating_L reads the *original* l max to set L_max_out, so it has
+        # to run before the radial modes are pruned against that cut.
         self.Truncating_L()
 
-        self.Truncate_modes(self.L_max_out, self.L, self.parent_j, self.lm_l_per_mode, self.lm_m_per_mode, self.lm_idx_per_mode, self.lm_pairs)
+        # Has to run before lm_pairs is built, so the (l, m) table only covers
+        # the l values that actually survive the cut.
+        self.Prune_radial_modes()
+
+        self.lm_pairs = jnp.asarray(MSS.build_lm_pairs(self.l))
+        print(f"(l, m) pairs to solve for: {self.lm_pairs.shape[0]} "
+              f"(l = 0 .. {int(self.L_max_out) - 1})")
 
         self.Setup_rebound()
 
-        init_pos, init_vel = self.Particle_ICs()
+        #init_pos, init_vel = self.Particle_ICs_Massless()
+
+        M_plummer = 1e6 * self.u.from_Msun
+        a_plummer = 0.0385 * self.u.from_Kpc
+
+        init_pos, init_vel = self.Particle_ICs_Plummer(M_plummer, a_plummer)
 
         self.Add_particles_to_sim(init_pos, init_vel)
-
 
         self.set_dt()
 

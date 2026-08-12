@@ -55,7 +55,7 @@ importlib.reload(ATDS_MS)
 SphHT = True
 integrator = 'leapfrog'
 plot = False
-dt_override = 0.5
+dt_override = 0.1
 ramp_time = 0
 
 l_band_size = 32
@@ -64,10 +64,10 @@ sparse_k_batch=262144
 r_chunk_size = 128
 compute_dtype = jnp.complex64
 
-L_out_frac = 1
+L_out_frac = 0.2
 
-m22 = 10
-R0 = [1]
+m22 = 70
+R0 = [0.19]
 
 for R0 in R0:
 

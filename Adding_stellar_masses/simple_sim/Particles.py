@@ -35,6 +35,23 @@ class Simulation_Particle:
         self.kinetic_energy = [1/2 * np.sum(self.v**2)]
         self.ang_mom = [np.linalg.norm(np.cross(self.r_pos, self.v))]
 
+        # How many timesteps there are between consecutive entries of the three
+        # lists above. Master_sim sets it from its poten_every; 1 means one
+        # entry per step, as before. Recorded here (and in the checkpoint) so
+        # the plotter can rebuild the energy time axis without having to know
+        # the run's configuration.
+        self.energy_every = 1
+
+        # Running (Welford) mean and sum-of-squared-deviations of v_sph, one
+        # per component. stellar_v_disp used to be recomputed with np.std over
+        # the whole history at every step, which is O(time_step) work per
+        # particle per step - i.e. the cost of a timestep grew linearly with
+        # how far into the run it was, and the total grew as no_time_steps^2.
+        # Welford gives the identical population variance in O(1).
+        self._v_disp_count = 1
+        self._v_disp_mean = np.asarray(self.v_sph, dtype=float).copy()
+        self._v_disp_m2 = np.zeros(3)
+
 
         # Keep record of current timestep
         self.time_step = 0
@@ -49,12 +66,17 @@ class Simulation_Particle:
         self.velocities_arr = np.empty((no_time_steps + 1, 3))
         self.velocities_arr[0] = self.v_sph
 
-    def update_state(self, new_pos_cart, new_vel_cart):
+    def update_state(self, new_pos_cart, new_vel_cart, record_energy=True):
         """
         Called after each rebound integration step to update this particle's
         Cartesian and spherical state and append to history arrays.
+
+        record_energy=False skips the kinetic_energy / ang_mom appends, so
+        those two stay in step with potential_energy when Master_sim is
+        evaluating the potential less often than every timestep. See
+        self.energy_every.
         """
-        
+
         x, y, z    = float(new_pos_cart[0]), float(new_pos_cart[1]), float(new_pos_cart[2])
         vx, vy, vz = float(new_vel_cart[0]), float(new_vel_cart[1]), float(new_vel_cart[2])
 
@@ -72,20 +94,24 @@ class Simulation_Particle:
         # In-place write into preallocated array; row 0 is the initial v_sph,
         # so the k-th update writes at row k.
         self.velocities_arr[self.time_step + 1] = self.v_sph
-        valid = self.velocities_arr[:self.time_step + 2]
 
-        new_vel_disp = (
-            np.std(valid[:, 0])**2
-            + np.std(valid[:, 1])**2
-            + np.std(valid[:, 2])**2
-        ) ** 0.5
+        # One Welford update per component instead of an np.std over the whole
+        # history. Same population variance, O(1) instead of O(time_step).
+        self._v_disp_count += 1
+        delta = self.v_sph - self._v_disp_mean
+        self._v_disp_mean += delta / self._v_disp_count
+        self._v_disp_m2 += delta * (self.v_sph - self._v_disp_mean)
+
+        new_vel_disp = float(np.sqrt(np.sum(self._v_disp_m2) / self._v_disp_count))
 
         self.stellar_v_disp.append(new_vel_disp)
 
         self.r_values.append(r)
         self.positions_xyz.append([x, y, z])
-        self.kinetic_energy.append(0.5 * (vx*vx + vy*vy + vz*vz))
-        self.ang_mom.append(np.linalg.norm(np.cross(self.r_pos, self.v)))
+
+        if record_energy:
+            self.kinetic_energy.append(0.5 * (vx*vx + vy*vy + vz*vz))
+            self.ang_mom.append(np.linalg.norm(np.cross(self.r_pos, self.v)))
 
         self.time_step += 1
 
