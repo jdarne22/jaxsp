@@ -18,11 +18,15 @@ class Checkpoint_manager:
     def __init__(self, checkpoint_dir):
         self.checkpoint_dir = checkpoint_dir
 
-    def save(self, particles, sim, time_step, no_time_steps, n_ramp_steps, final=False):
+    def save(self, particles, sim, time_step, no_time_steps, n_ramp_steps,
+             final=False, cleanup_steps=True):
         """
         Saves every particle's full history plus the current step count
         and rebound's clock. final=True names the file distinctly, so a
-        finished run's checkpoint is never mistaken for a mid-run one.
+        finished run's checkpoint is never mistaken for a mid-run one, and
+        (unless cleanup_steps=False) deletes the intermediate step
+        checkpoints - the final one holds the full history, so they're
+        dead weight once the run has completed.
         """
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         file_name = 'checkpoint_final.pkl' if final else f'checkpoint_step_{time_step}.pkl'
@@ -36,11 +40,40 @@ class Checkpoint_manager:
             'particle_states': [self._particle_to_dict(p) for p in particles],
         }
 
-        with open(path, 'wb') as f:
+        # Write to a temporary file and rename, so a job killed mid-write
+        # leaves the previous checkpoint intact rather than a truncated
+        # pickle. Matters most for the final save, where the step
+        # checkpoints are deleted immediately afterwards.
+        tmp_path = path + '.tmp'
+        with open(tmp_path, 'wb') as f:
             pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
 
         label = "Final checkpoint" if final else f"Checkpoint at step {time_step}"
         print(f"{label} saved: {path}", flush=True)
+
+        if final and cleanup_steps:
+            self._delete_step_checkpoints()
+
+    def _delete_step_checkpoints(self):
+        """
+        Removes every checkpoint_step_*.pkl in checkpoint_dir. Only called
+        once checkpoint_final.pkl is safely on disk.
+        """
+        removed = 0
+        for f in os.listdir(self.checkpoint_dir):
+            if f.startswith('checkpoint_step_') and f.endswith('.pkl'):
+                try:
+                    os.remove(os.path.join(self.checkpoint_dir, f))
+                    removed += 1
+                except OSError as e:
+                    # A failed cleanup shouldn't lose a completed run.
+                    print(f"Could not delete {f}: {e}", flush=True)
+        if removed:
+            print(f"Deleted {removed} intermediate checkpoint(s) in {self.checkpoint_dir}",
+                  flush=True)
 
     def load(self, particles, sim):
         """

@@ -14,9 +14,10 @@ import Particles as Part
 
 class SimInit:
 
-    def __init__(self, m22, r_min, r_max_enclosing_frac, no_radius_bins, r_cut_kpc=None):
+    def __init__(self, m22, r_half, r_min, r_max_enclosing_frac, no_radius_bins, gal_name, r_cut_kpc=None):
 
         self.m22 = m22
+        self.r_half = r_half
         self.r_min = r_min
         self.r_max_enclosing_frac = r_max_enclosing_frac
         self.no_radius_bins = no_radius_bins
@@ -26,7 +27,9 @@ class SimInit:
         # grid. See Truncate_radial_grid for why this is cheap and safe.
         self.r_cut_kpc = r_cut_kpc
 
-        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "precomputed_wf")
+        self.gal_name = gal_name
+
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "precomputed_wf", self.gal_name)
         os.makedirs(cache_dir, exist_ok=True)
         cache_suffix = f"m22_{float(self.m22):.6g}_rbins_{int(self.no_radius_bins)}"
         self.r_j_r_fname = os.path.join(cache_dir, f"precomputed_R_j_r_{cache_suffix}.npz")
@@ -512,6 +515,275 @@ class SimInit:
         return init_pos, init_vel
 
 
+    def Teodori_ICs(self, M_plummer, a_plummer):
+
+        self.particles = []
+
+        def sample_plummer_positions(a_plummer):
+
+            key1 = jax.random.PRNGKey(42)
+
+            # Positions
+
+            X = jax.random.uniform(key1, shape=(3, self.no_of_particles), minval=0.0, maxval=1.0)
+
+            X1 = X[0]
+            X2 = X[1]
+            X3 = X[2]
+
+            # Truncated at the grid's outer radius: psi_r below is not tabulated
+            # past it, and the untruncated Plummer tail runs to infinity. With
+            # s = r / sqrt(r^2 + a^2) the enclosed mass fraction is just s^3.
+            s_max = self.r[-1] / jnp.sqrt(self.r[-1]**2 + a_plummer**2)
+
+            s = (X1 * s_max**3)**(1/3)
+
+            star_radii = a_plummer * s / jnp.sqrt(1 - s**2)
+
+            star_z = star_radii * (1 - 2 * X2)
+            star_x = jnp.sqrt(star_radii**2 - star_z**2) * jnp.cos(2 * jnp.pi * X3)
+            star_y = jnp.sqrt(star_radii**2 - star_z**2) * jnp.sin(2 * jnp.pi * X3)
+
+            return star_x, star_y, star_z, star_radii
+
+        def build_f1():
+
+            # initialise() still has to run - it builds the amplitudes, the
+            # radial mode table and the static background the ramp blends
+            # against - but its return value, the time-averaged density, is
+            # NOT the potential to invert in. The stars are integrated in the
+            # monopole of the realised wavefunction at step 0, which differs
+            # from the time average by the eigenmode interference terms; see
+            # Rho_lm_Builder.initial_rho_monopole.
+            self.Rho_lm_builder.initialise()
+
+            rho_mono = self.Rho_lm_builder.initial_rho_monopole()
+
+            # # Cumulative enclosed mass M_enc(r) on the radial grid; interpolated
+            # # per particle below. SSF.Enclosed_mass applies the 4π r² factor.
+            M_enc_arr = MF.Enclosed_mass(self.r, rho_mono)
+
+            # Enclosed_mass starts its cumsum at self.r[0], so M_enc_arr[0] is
+            # exactly zero and dpsi_dr[0] would divide by it. Fold the core in here
+            # rather than at the particles: everything below runs off M_enc_arr.
+            r_inner_edge = self.r[0]
+            rho_core = rho_mono[0]
+            M_core = 4/3 * jnp.pi * rho_core * r_inner_edge**3
+
+            M_enc_arr = M_enc_arr + M_core
+
+            M_tot = M_enc_arr[-1]
+
+            # psi on the simulation grid, with psi(self.r[-1]) = 0.
+            integrand_in = self.G * M_enc_arr / self.r**2
+
+            dA_in = 0.5 * (integrand_in[1:] + integrand_in[:-1]) * jnp.diff(self.r)
+
+            psi_in = jnp.concatenate([jnp.cumsum(dA_in[::-1])[::-1], jnp.array([0.0])])
+
+            # --- Keplerian tail -------------------------------------------------
+            # psi(self.r[-1]) = 0 is only the right zero point if self.r[-1] is
+            # infinity. All the halo mass is inside it, so outside the potential
+            # is Keplerian and psi(r_max) = G M_tot / r_max - at m22 = 10 that is
+            # 20.87 against psi_max = 237.6, a 9% offset, not a constant that
+            # cancels. Zeroing it declares every star with v > sqrt(2 psi(r))
+            # unbound and drops it, which is exactly the mass the DF then cannot
+            # put back: the round trip rho -> f -> rho came back 94% LOW at
+            # a_plummer = 0.1, and that error is structural - refining the
+            # quadrature to 128000 nodes does not move it.
+            #
+            # So tabulate out to where the Plummer tail is negligible, with
+            # M_enc frozen at M_tot and rho_dm = 0 beyond the grid. This assumes
+            # the halo is isolated out there, which is the same assumption the
+            # psi -> 0 boundary condition already makes, only now applied
+            # consistently. Stars are still SAMPLED only inside self.r[-1] -
+            # the sim has no forces beyond it - this just fixes their energies.
+            #
+            # Costs nothing where the old convention was already adequate: at
+            # a_plummer = 0.01 sigma_3D moves by +0.00% and no star gains enough
+            # energy to leave the grid.
+            s_out = (1.0 - 1e-10)**(1/3)
+            r_out = jnp.maximum(a_plummer * s_out / jnp.sqrt(1 - s_out**2),
+                                self.r[-1] * 10.0)
+
+            r_tail = jnp.logspace(jnp.log10(self.r[-1] * 1.0001), jnp.log10(r_out), 2000)
+
+            r_tab = jnp.concatenate([self.r, r_tail])
+
+            M_tab = jnp.concatenate([M_enc_arr, jnp.full_like(r_tail, M_tot)])
+
+            rho_bg = jnp.concatenate([rho_mono, jnp.zeros_like(r_tail)])
+
+            psi_r = jnp.concatenate([psi_in + self.G * M_tot / self.r[-1],
+                                     self.G * M_tot / r_tail])
+            # --------------------------------------------------------------------
+
+            dpsi_dr = - self.G * M_tab / r_tab**2
+
+            drho_dr = -15 * M_plummer * r_tab / (4 * jnp.pi * a_plummer**5) * (1 + r_tab**2 / a_plummer**2)**(-7/2)
+
+            drho_dpsi = drho_dr / dpsi_dr
+
+            d2rho_dr2 = -15 * M_plummer / (4 * jnp.pi * a_plummer**5) * ((1 + r_tab**2 / a_plummer**2)**(-7/2) - r_tab * 7 * (1 + r_tab**2/a_plummer**2)**(-9/2) * r_tab/a_plummer**2)
+
+            d2psi_dr2 = 2 * self.G * M_tab / r_tab**3 - 4 * jnp.pi * self.G * rho_bg
+
+            d2rho_dpsi2 = (d2rho_dr2 * dpsi_dr - drho_dr * d2psi_dr2) / dpsi_dr**3
+
+            # Tabulate f on psi(r) itself, NOT on logspace(log10(psi_max) - 8,
+            # log10(psi_max), 1000). The stars sit deep inside the soliton core
+            # where psi is nearly flat - at m22 = 10, a_plummer = 0.01, the whole
+            # region r < a_plummer spans psi = 236.16 .. 237.59, i.e. 0.0026 dex,
+            # while a log grid of 1000 nodes over 8 decades steps 0.008 dex. That
+            # is ONE node across the radii holding a third of the stellar mass,
+            # and the round trip rho -> f -> rho came back 222% high there.
+            # Matching the eps nodes to the radial grid puts them where psi
+            # actually has structure and makes the interp below exact at the
+            # nodes; it beats brute-forcing the log grid to 64000 nodes (0.08%
+            # vs 0.47% error) without the 512 MB (n_eps, n_u) array.
+            #
+            # psi_r is strictly decreasing - integrand = G M_enc / r^2 > 0 - so
+            # the reverse is strictly increasing and needs no unique() (which
+            # would make the shape dynamic). Drop psi_r[-1], which is exactly 0:
+            # f ~ eps^(-1/2) diverges there and the velocity sampler takes
+            # log(epsilons).
+            epsilons = psi_r[::-1][1:]
+
+            # psi_r decreases outwards, jnp.interp needs an ascending abscissa.
+            psi_asc = psi_r[::-1]
+            d2rho_dpsi2_asc = d2rho_dpsi2[::-1]
+
+            # Eq. (A5)'s Q = sqrt(E - psi) removes the 1/sqrt(E - psi) singularity;
+            # writing Q = sqrt(E) * u then puts every energy on the same u nodes, so
+            # the whole inversion is one (n_eps, n_u) array rather than a per-energy
+            # integral with its own upper limit.
+            #
+            # u is clustered as t^2, NOT uniform. The integrand is sampled at
+            # eps (1 - u^2), so a uniform u steps 1 - u^2 by only ~1/n_u^2 = 1e-6
+            # near u = 0 - and the stars sit where psi is flat, so the whole
+            # stellar body can span less than that in relative psi and simply not
+            # be resolved. At a_plummer = 5e-5 the round trip was 94% off with a
+            # uniform grid; t^2 brings it to 0.19% at the same 1000 nodes, which
+            # is what a uniform grid needs 16000 nodes to reach. Identical to
+            # four decimals wherever the uniform grid was already adequate.
+            u_q = jnp.linspace(0.0, 1.0, 1000)**2
+
+            integrand_Q = jnp.interp(epsilons[:, None] * (1 - u_q[None, :]**2), psi_asc, d2rho_dpsi2_asc)
+
+            dA_Q = 0.5 * (integrand_Q[:, 1:] + integrand_Q[:, :-1]) * jnp.diff(u_q)
+
+            second_term = jnp.sqrt(epsilons) * jnp.sum(dA_Q, axis=1)
+
+            # drho_dpsi[-1] is the boundary term, now at r_tab[-1] where the
+            # Plummer tail has 1e-10 of its mass left outside.
+            f_eps = (drho_dpsi[-1] / jnp.sqrt(epsilons) + 2 * second_term) / (jnp.sqrt(8.0) * jnp.pi**2)
+
+            # A NEGATIVE f is not always quadrature noise. Where it appears at
+            # high eps - the most bound orbits, i.e. the core - it is Eddington's
+            # non-negativity condition failing: no isotropic DF reproduces this
+            # (rho_star, psi) pair at all, and no grid or precision fixes that.
+            # For a Plummer tracer as extended as the halo it is emphatic: at
+            # a_plummer = 0.6, 622 of 2999 nodes go negative, reaching
+            # eps / psi_max = 1. Clipping silently turned "these ICs are
+            # impossible" into "here are some quietly wrong ICs", so refuse them
+            # instead. Only the far tail, eps < 1e-2 psi_max, is treated as noise.
+            core_negative = (f_eps < 0) & (epsilons > 1e-2 * epsilons[-1])
+
+            if bool(jnp.any(core_negative)):
+                worst = float(jnp.max(epsilons[core_negative]) / epsilons[-1])
+                raise ValueError(
+                    f"No isotropic distribution function exists for this tracer in "
+                    f"this potential: the Eddington f(eps) is negative at "
+                    f"{int(core_negative.sum())} of {epsilons.size} energies, up to "
+                    f"eps / psi_max = {worst:.3g}. This is Eddington's non-negativity "
+                    f"condition failing, not a resolution problem - refining the "
+                    f"quadrature will not help. a_plummer = {a_plummer} is too "
+                    f"extended for this halo; reduce it, or move to an anisotropic "
+                    f"DF (Osipkov-Merritt) which has the freedom to realise it."
+                )
+
+            # Far-tail noise only, by the check above.
+            f_eps = jnp.clip(f_eps, 0.0, None)
+
+            return r_tab, psi_r, epsilons, f_eps
+
+        def sample_plummer_velocities(star_radii, r_tab, psi_r, epsilons, f_eps):
+
+            psi_star = jnp.interp(star_radii, r_tab, psi_r)
+
+            v_esc = jnp.sqrt(2 * psi_star)
+
+            # One shared w = v / v_esc grid, so every star's CDF sits on the same
+            # abscissa and the inversion is a single batched interp. Clustered as
+            # t^2 for the same reason as u_q above: eps_w = psi_star (1 - w^2)
+            # has to resolve the top of f, where the stars are.
+            w = jnp.linspace(0.0, 1.0, 1000)**2
+
+            eps_w = psi_star[:, None] * (1 - w[None, :]**2)
+
+            # f spans many decades and epsilons is log-spaced, so interpolate in log.
+            f_w = jnp.exp(jnp.interp(jnp.log(jnp.clip(eps_w, epsilons[0], epsilons[-1])),
+                                    jnp.log(epsilons), jnp.log(jnp.clip(f_eps, 1e-300, None))))
+
+            # Eq. (A7). This has to be a cumulative INTEGRAL, not jnp.cumsum of
+            # the integrand: with the uniform w this used to be, the constant dw
+            # cancelled against the normalisation below and the bare cumsum was
+            # right, but w is clustered now and dropping dw biases the CDF
+            # towards the dense end (it cost 13% in sigma_3D at a_plummer = 0.01).
+            integrand_w = f_w * w[None, :]**2
+
+            dcdf = 0.5 * (integrand_w[:, 1:] + integrand_w[:, :-1]) * jnp.diff(w)
+
+            cdf = jnp.concatenate([jnp.zeros((integrand_w.shape[0], 1)),
+                                   jnp.cumsum(dcdf, axis=1)], axis=1)
+
+            cdf = cdf / cdf[:, -1:]
+
+            key2 = jax.random.PRNGKey(43)
+
+            X = jax.random.uniform(key2, shape=(3, self.no_of_particles), minval=0.0, maxval=1.0)
+
+            X4 = X[0]
+            X5 = X[1]
+            X6 = X[2]
+
+            # vmapped rather than batched because the abscissa differs row to row.
+            v = jax.vmap(lambda c, q: jnp.interp(q, c, w))(cdf, X4) * v_esc
+
+            # beta0 = 0 collapses Eqs. (A8)-(A10) to an isotropic direction,
+            # independent of r_hat.
+            vel_z = v * (1 - 2 * X5)
+            vel_x = jnp.sqrt(v**2 - vel_z**2) * jnp.cos(2 * jnp.pi * X6)
+            vel_y = jnp.sqrt(v**2 - vel_z**2) * jnp.sin(2 * jnp.pi * X6)
+
+            return vel_x, vel_y, vel_z
+
+        star_x, star_y, star_z, star_radii = sample_plummer_positions(a_plummer)
+
+        r_tab, psi_r, epsilons, f_eps = build_f1()
+
+        vel_x, vel_y, vel_z = sample_plummer_velocities(star_radii, r_tab, psi_r, epsilons, f_eps)
+
+        # The Kepler tail gives stars near the grid edge a real, non-zero escape
+        # speed, so unlike under psi(r_max) = 0 some can now be energetic enough
+        # to leave self.r[-1] - where there is no tabulated force. Sampling still
+        # truncates positions at the grid, so this is only a warning, but a large
+        # count means a_plummer is pushing past what the grid can integrate.
+        v_sq = vel_x**2 + vel_y**2 + vel_z**2
+        psi_edge = jnp.interp(self.r[-1], r_tab, psi_r)
+        n_escaping = int(jnp.sum(0.5 * v_sq > jnp.interp(star_radii, r_tab, psi_r) - psi_edge))
+
+        if n_escaping:
+            print(f"Warning: {n_escaping} of {self.no_of_particles} stars have enough "
+                  f"energy to pass r_max = {float(self.r[-1]):.4g}, where no forces are "
+                  f"tabulated. Consider reducing a_plummer = {a_plummer}.")
+
+        init_pos = jnp.stack([star_x, star_y, star_z], axis=1)
+
+        init_vel = jnp.stack([vel_x, vel_y, vel_z], axis=1)
+
+        return init_pos, init_vel
+
 
     def set_dt(self):
 
@@ -581,9 +853,9 @@ class SimInit:
         #init_pos, init_vel = self.Particle_ICs_Massless()
 
         M_plummer = 1e6 * self.u.from_Msun
-        a_plummer = 0.0385 * self.u.from_Kpc
+        a_plummer = self.r_half * 0.7 * self.u.from_Kpc
 
-        init_pos, init_vel = self.Particle_ICs_Plummer(M_plummer, a_plummer)
+        init_pos, init_vel = self.Teodori_ICs(M_plummer, a_plummer)
 
         self.Add_particles_to_sim(init_pos, init_vel)
 

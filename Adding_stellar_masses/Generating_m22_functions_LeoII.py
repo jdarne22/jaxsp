@@ -57,7 +57,7 @@ for m22 in m22_list:
         r_max_enclosing_frac = 0.99
 
 
-        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "precomputed_wf")
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "precomputed_wf/LeoII/")
         os.makedirs(cache_dir, exist_ok=True)
         cache_suffix = f"m22_{float(m22):.6g}_rbins_{int(R_bin)}"
         r_j_r_fname = os.path.join(cache_dir, f"precomputed_R_j_r_{cache_suffix}.npz")

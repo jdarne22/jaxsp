@@ -103,13 +103,14 @@ class StellarSimTDep:
     this class just wires them together and drives them in order.
     '''
 
-    def __init__(self, m22, r_half, r_half_width, no_of_particles, total_evolve_time, r_min, r_max_enclosing_frac,
+    def __init__(self, gal_name, m22, r_half, r_half_width, no_of_particles, total_evolve_time, r_min, r_max_enclosing_frac,
                  no_radius_bins, dt_override, ramp_time, r_chunk_size, l_band_size,
                  compute_dtype, use_multi_gpu=True, L_out_frac=1.0,
                  use_merged_solver=True, chunk_batch_size=None, frozen=False, sph_sym=False,
                  r_cut_kpc=None, particle_chunk_size=None, particle_batch_size=None,
                  poten_every=10):
 
+        self.gal_name = gal_name
         self.m22 = m22
         self.r_half = r_half
         self.time_step = 0
@@ -142,7 +143,7 @@ class StellarSimTDep:
 
         self.sharding = SM.ShardingManager(use_multi_gpu)
 
-        self.sim_init = Sim_init.SimInit(m22, r_min, r_max_enclosing_frac, no_radius_bins,
+        self.sim_init = Sim_init.SimInit(m22, r_half, r_min, r_max_enclosing_frac, no_radius_bins, gal_name,
                                          r_cut_kpc=r_cut_kpc)
 
         # SimInit's own methods (Run_initialisation, Setup_rebound, Particle_ICs, ...)
@@ -150,7 +151,6 @@ class StellarSimTDep:
         # so SimInit stays agnostic of the wider simulation config.
         self.sim_init.u = jsp.set_schroedinger_units(m22)
         self.sim_init.G = GN.value * (self.sim_init.u.from_cm**3) / (self.sim_init.u.from_g * self.sim_init.u.from_s**2)
-        self.sim_init.r_half = r_half
         self.sim_init.r_half_width = r_half_width
         self.sim_init.no_of_particles = no_of_particles
         self.sim_init.total_evolve_time = total_evolve_time
@@ -310,7 +310,7 @@ class StellarSimTDep:
 
             print(f"Time step {self.time_step + 1} / {sim_init.no_time_steps}")
 
-            # frozen holds the wavefunction at t = dt, so rho_lms only
+            # frozen holds the wavefunction at t = 0, so rho_lms only
             # changes while the ramp is still blending it against the static
             # background. Once both this step and the step the current
             # rho_lms was built for are past the ramp, the array on the GPU

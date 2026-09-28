@@ -30,5 +30,7 @@ export XLA_PYTHON_CLIENT_PREALLOCATE=false
 # way to tell "still compiling" apart from "compiled and then died running".
 #export JAX_LOG_COMPILES=1
 
+export XLA_FLAGS="--xla_gpu_deterministic_ops=true"
+
 
 python -u $WORKDIR/Testing/Running_sims_L_reduc.py 2>&1 | tee $WORKDIR/logs/live_10_L_reduc_output.log

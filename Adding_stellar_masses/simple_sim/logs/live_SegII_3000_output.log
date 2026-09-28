@@ -1,0 +1,1342 @@
+E0928 13:14:44.715933  331265 numa_hwloc.cc:121] Call to hwloc_set_cpubind() failed: Invalid argument [22]
+Completing sim with: m22 = 3000, R0 = 0.001, dt = 2, L_out_frac = 0.125, r_cut = 1
+[mem_saver] Multi-GPU sharding enabled across 2 devices.
+Run mode: frozen=False, sph_sym=False, r_cut_kpc=1
+Loading precomputed R_j_r from /gpfs/home/jd925/Adding_stellar_masses/simple_sim/../precomputed_wf/SegII/precomputed_R_j_r_m22_3000_rbins_1000.npz...
+Radial grid truncated at r_cut = 1 kpc: 864 / 1000 bins kept (86.4%), outermost radius now 1.3 kpc (full grid reached 6.48 kpc).
+l max from jaxsp: 1011
+SphHT bandwidth truncated by L_out_frac=0.125: L_max_out = 253 (natural 2L-1 = 2023, floor L = 1012)
+L_max_out 253 not divisible by 2 devices; rounding down to 252 for L-sharding.
+Radial-mode pruning (l >= L_max_out=252): dropped 271575 of 464484 radial modes (58.5%), 192909 kept.
+Eigenmode library uploaded: 3.17 GB, on a single device.
+(l, m) pairs to solve for: 63504 (l = 0 .. 251)
+Particle 0: v_circ = 0.085195 km/s
+Particle 1: v_circ = 0.007459 km/s
+Particle 2: v_circ = 0.053240 km/s
+Particle 3: v_circ = 0.202969 km/s
+Particle 4: v_circ = 0.078986 km/s
+Particle 5: v_circ = 0.071968 km/s
+Particle 6: v_circ = 0.112769 km/s
+Particle 7: v_circ = 0.108557 km/s
+Particle 8: v_circ = 0.013690 km/s
+Particle 9: v_circ = 0.145004 km/s
+Particle 10: v_circ = 0.055123 km/s
+Particle 11: v_circ = 0.034610 km/s
+Particle 12: v_circ = 0.070131 km/s
+Particle 13: v_circ = 0.392150 km/s
+Particle 14: v_circ = 0.103211 km/s
+Particle 15: v_circ = 0.056781 km/s
+Particle 16: v_circ = 0.028500 km/s
+Particle 17: v_circ = 0.030934 km/s
+Particle 18: v_circ = 0.030562 km/s
+Particle 19: v_circ = 0.198734 km/s
+Particle 20: v_circ = 0.046360 km/s
+Particle 21: v_circ = 0.026478 km/s
+Particle 22: v_circ = 0.103995 km/s
+Particle 23: v_circ = 0.109980 km/s
+Particle 24: v_circ = 0.029168 km/s
+Particle 25: v_circ = 0.730355 km/s
+Particle 26: v_circ = 0.104800 km/s
+Particle 27: v_circ = 0.011056 km/s
+Particle 28: v_circ = 0.026339 km/s
+Particle 29: v_circ = 0.034193 km/s
+Particle 30: v_circ = 0.110580 km/s
+Particle 31: v_circ = 0.032396 km/s
+Particle 32: v_circ = 0.111651 km/s
+Particle 33: v_circ = 0.057441 km/s
+Particle 34: v_circ = 0.024752 km/s
+Particle 35: v_circ = 0.060250 km/s
+Particle 36: v_circ = 0.105225 km/s
+Particle 37: v_circ = 0.086614 km/s
+Particle 38: v_circ = 0.286244 km/s
+Particle 39: v_circ = 0.014112 km/s
+Particle 40: v_circ = 0.073377 km/s
+Particle 41: v_circ = 0.309534 km/s
+Particle 42: v_circ = 0.034940 km/s
+Particle 43: v_circ = 0.015977 km/s
+Particle 44: v_circ = 0.083575 km/s
+Particle 45: v_circ = 0.065457 km/s
+Particle 46: v_circ = 0.102867 km/s
+Particle 47: v_circ = 0.146960 km/s
+Particle 48: v_circ = 0.018723 km/s
+Particle 49: v_circ = 0.093521 km/s
+Particle 50: v_circ = 0.391934 km/s
+Particle 51: v_circ = 0.125484 km/s
+Particle 52: v_circ = 0.023172 km/s
+Particle 53: v_circ = 0.240599 km/s
+Particle 54: v_circ = 0.086140 km/s
+Particle 55: v_circ = 0.014669 km/s
+Particle 56: v_circ = 0.012413 km/s
+Particle 57: v_circ = 0.101477 km/s
+Particle 58: v_circ = 0.052765 km/s
+Particle 59: v_circ = 0.015512 km/s
+Particle 60: v_circ = 0.036556 km/s
+Particle 61: v_circ = 0.073905 km/s
+Particle 62: v_circ = 0.208803 km/s
+Particle 63: v_circ = 0.006344 km/s
+Particle 64: v_circ = 0.684786 km/s
+Particle 65: v_circ = 0.018682 km/s
+Particle 66: v_circ = 0.042133 km/s
+Particle 67: v_circ = 0.025749 km/s
+Particle 68: v_circ = 0.032401 km/s
+Particle 69: v_circ = 0.084247 km/s
+Particle 70: v_circ = 0.021265 km/s
+Particle 71: v_circ = 0.022202 km/s
+Particle 72: v_circ = 0.034132 km/s
+Particle 73: v_circ = 0.015680 km/s
+Particle 74: v_circ = 0.072277 km/s
+Particle 75: v_circ = 0.045314 km/s
+Particle 76: v_circ = 0.096108 km/s
+Particle 77: v_circ = 0.080723 km/s
+Particle 78: v_circ = 0.023951 km/s
+Particle 79: v_circ = 0.218344 km/s
+Particle 80: v_circ = 0.104159 km/s
+Particle 81: v_circ = 0.018213 km/s
+Particle 82: v_circ = 0.231116 km/s
+Particle 83: v_circ = 0.085428 km/s
+Particle 84: v_circ = 0.067143 km/s
+Particle 85: v_circ = 0.056467 km/s
+Particle 86: v_circ = 0.115065 km/s
+Particle 87: v_circ = 0.033748 km/s
+Particle 88: v_circ = 0.905771 km/s
+Particle 89: v_circ = 0.017248 km/s
+Particle 90: v_circ = 0.115959 km/s
+Particle 91: v_circ = 0.021357 km/s
+Particle 92: v_circ = 0.027078 km/s
+Particle 93: v_circ = 0.264639 km/s
+Particle 94: v_circ = 0.058244 km/s
+Particle 95: v_circ = 0.029456 km/s
+Particle 96: v_circ = 0.041679 km/s
+Particle 97: v_circ = 0.438543 km/s
+Particle 98: v_circ = 0.041967 km/s
+Particle 99: v_circ = 0.052188 km/s
+Particle 100: v_circ = 0.019317 km/s
+Particle 101: v_circ = 0.167582 km/s
+Particle 102: v_circ = 0.033787 km/s
+Particle 103: v_circ = 0.009055 km/s
+Particle 104: v_circ = 0.030613 km/s
+Particle 105: v_circ = 0.042682 km/s
+Particle 106: v_circ = 0.114650 km/s
+Particle 107: v_circ = 0.037039 km/s
+Particle 108: v_circ = 0.039679 km/s
+Particle 109: v_circ = 0.014526 km/s
+Particle 110: v_circ = 0.080938 km/s
+Particle 111: v_circ = 0.151450 km/s
+Particle 112: v_circ = 0.148518 km/s
+Particle 113: v_circ = 0.131827 km/s
+Particle 114: v_circ = 0.054980 km/s
+Particle 115: v_circ = 0.017323 km/s
+Particle 116: v_circ = 0.021012 km/s
+Particle 117: v_circ = 0.021925 km/s
+Particle 118: v_circ = 0.239338 km/s
+Particle 119: v_circ = 0.007166 km/s
+Particle 120: v_circ = 0.073038 km/s
+Particle 121: v_circ = 0.023537 km/s
+Particle 122: v_circ = 0.120449 km/s
+Particle 123: v_circ = 0.030057 km/s
+Particle 124: v_circ = 0.020996 km/s
+Particle 125: v_circ = 0.022378 km/s
+Particle 126: v_circ = 0.125553 km/s
+Particle 127: v_circ = 0.122682 km/s
+Particle 128: v_circ = 0.047869 km/s
+Particle 129: v_circ = 0.133288 km/s
+Particle 130: v_circ = 0.082577 km/s
+Particle 131: v_circ = 0.059309 km/s
+Particle 132: v_circ = 0.077743 km/s
+Particle 133: v_circ = 0.013154 km/s
+Particle 134: v_circ = 0.009344 km/s
+Particle 135: v_circ = 0.033496 km/s
+Particle 136: v_circ = 0.290851 km/s
+Particle 137: v_circ = 0.261610 km/s
+Particle 138: v_circ = 0.460540 km/s
+Particle 139: v_circ = 0.111059 km/s
+Particle 140: v_circ = 0.156827 km/s
+Particle 141: v_circ = 0.004998 km/s
+Particle 142: v_circ = 0.090955 km/s
+Particle 143: v_circ = 0.025394 km/s
+Particle 144: v_circ = 0.330008 km/s
+Particle 145: v_circ = 0.124296 km/s
+Particle 146: v_circ = 0.018020 km/s
+Particle 147: v_circ = 0.033806 km/s
+Particle 148: v_circ = 0.011454 km/s
+Particle 149: v_circ = 0.031332 km/s
+Particle 150: v_circ = 0.894281 km/s
+Particle 151: v_circ = 0.095360 km/s
+Particle 152: v_circ = 0.099057 km/s
+Particle 153: v_circ = 0.057734 km/s
+Particle 154: v_circ = 0.039805 km/s
+Particle 155: v_circ = 0.014789 km/s
+Particle 156: v_circ = 0.042769 km/s
+Particle 157: v_circ = 0.014412 km/s
+Particle 158: v_circ = 0.047616 km/s
+Particle 159: v_circ = 0.020354 km/s
+Particle 160: v_circ = 0.025175 km/s
+Particle 161: v_circ = 0.118155 km/s
+Particle 162: v_circ = 0.037886 km/s
+Particle 163: v_circ = 0.057229 km/s
+Particle 164: v_circ = 0.026840 km/s
+Particle 165: v_circ = 0.304235 km/s
+Particle 166: v_circ = 0.064677 km/s
+Particle 167: v_circ = 0.142017 km/s
+Particle 168: v_circ = 0.202203 km/s
+Particle 169: v_circ = 0.036072 km/s
+Particle 170: v_circ = 0.016889 km/s
+Particle 171: v_circ = 0.547013 km/s
+Particle 172: v_circ = 0.083852 km/s
+Particle 173: v_circ = 0.040386 km/s
+Particle 174: v_circ = 0.283490 km/s
+Particle 175: v_circ = 0.108787 km/s
+Particle 176: v_circ = 0.307372 km/s
+Particle 177: v_circ = 0.038769 km/s
+Particle 178: v_circ = 0.090465 km/s
+Particle 179: v_circ = 0.162505 km/s
+Particle 180: v_circ = 0.052939 km/s
+Particle 181: v_circ = 0.125451 km/s
+Particle 182: v_circ = 0.084633 km/s
+Particle 183: v_circ = 0.154015 km/s
+Particle 184: v_circ = 0.100663 km/s
+Particle 185: v_circ = 0.067378 km/s
+Particle 186: v_circ = 0.069106 km/s
+Particle 187: v_circ = 0.015252 km/s
+Particle 188: v_circ = 0.329341 km/s
+Particle 189: v_circ = 0.021283 km/s
+Particle 190: v_circ = 0.106961 km/s
+Particle 191: v_circ = 0.065765 km/s
+Particle 192: v_circ = 0.044594 km/s
+Particle 193: v_circ = 0.117665 km/s
+Particle 194: v_circ = 0.029365 km/s
+Particle 195: v_circ = 0.118239 km/s
+Particle 196: v_circ = 0.110322 km/s
+Particle 197: v_circ = 0.036894 km/s
+Particle 198: v_circ = 0.314086 km/s
+Particle 199: v_circ = 0.055274 km/s
+Particle 200: v_circ = 0.009683 km/s
+Particle 201: v_circ = 0.025404 km/s
+Particle 202: v_circ = 0.073860 km/s
+Particle 203: v_circ = 0.081044 km/s
+Particle 204: v_circ = 0.034243 km/s
+Particle 205: v_circ = 0.122575 km/s
+Particle 206: v_circ = 0.056278 km/s
+Particle 207: v_circ = 0.121401 km/s
+Particle 208: v_circ = 0.025272 km/s
+Particle 209: v_circ = 0.116624 km/s
+Particle 210: v_circ = 0.005978 km/s
+Particle 211: v_circ = 0.252163 km/s
+Particle 212: v_circ = 0.030582 km/s
+Particle 213: v_circ = 0.174300 km/s
+Particle 214: v_circ = 0.230034 km/s
+Particle 215: v_circ = 0.036021 km/s
+Particle 216: v_circ = 0.354734 km/s
+Particle 217: v_circ = 0.130559 km/s
+Particle 218: v_circ = 0.024764 km/s
+Particle 219: v_circ = 0.408759 km/s
+Particle 220: v_circ = 0.152039 km/s
+Particle 221: v_circ = 0.205067 km/s
+Particle 222: v_circ = 0.029171 km/s
+Particle 223: v_circ = 0.102124 km/s
+Particle 224: v_circ = 0.110898 km/s
+Particle 225: v_circ = 0.036619 km/s
+Particle 226: v_circ = 0.054691 km/s
+Particle 227: v_circ = 0.199232 km/s
+Particle 228: v_circ = 0.265019 km/s
+Particle 229: v_circ = 0.202748 km/s
+Particle 230: v_circ = 0.158626 km/s
+Particle 231: v_circ = 0.026556 km/s
+Particle 232: v_circ = 0.019336 km/s
+Particle 233: v_circ = 0.049688 km/s
+Particle 234: v_circ = 0.048361 km/s
+Particle 235: v_circ = 0.071046 km/s
+Particle 236: v_circ = 0.137080 km/s
+Particle 237: v_circ = 0.054037 km/s
+Particle 238: v_circ = 0.048327 km/s
+Particle 239: v_circ = 0.012122 km/s
+Particle 240: v_circ = 0.028137 km/s
+Particle 241: v_circ = 0.023304 km/s
+Particle 242: v_circ = 0.108327 km/s
+Particle 243: v_circ = 0.039695 km/s
+Particle 244: v_circ = 0.184386 km/s
+Particle 245: v_circ = 0.078700 km/s
+Particle 246: v_circ = 0.153453 km/s
+Particle 247: v_circ = 0.024198 km/s
+Particle 248: v_circ = 0.030949 km/s
+Particle 249: v_circ = 0.078354 km/s
+Particle 250: v_circ = 0.024032 km/s
+Particle 251: v_circ = 0.222959 km/s
+Particle 252: v_circ = 0.095285 km/s
+Particle 253: v_circ = 0.012697 km/s
+Particle 254: v_circ = 0.215833 km/s
+Particle 255: v_circ = 0.078736 km/s
+Particle 256: v_circ = 0.156081 km/s
+Particle 257: v_circ = 0.104032 km/s
+Particle 258: v_circ = 0.018863 km/s
+Particle 259: v_circ = 0.032059 km/s
+Particle 260: v_circ = 0.026313 km/s
+Particle 261: v_circ = 0.017928 km/s
+Particle 262: v_circ = 0.048906 km/s
+Particle 263: v_circ = 0.037704 km/s
+Particle 264: v_circ = 0.006956 km/s
+Particle 265: v_circ = 0.041161 km/s
+Particle 266: v_circ = 0.084319 km/s
+Particle 267: v_circ = 0.035539 km/s
+Particle 268: v_circ = 0.018975 km/s
+Particle 269: v_circ = 0.096598 km/s
+Particle 270: v_circ = 0.192987 km/s
+Particle 271: v_circ = 0.240004 km/s
+Particle 272: v_circ = 0.018908 km/s
+Particle 273: v_circ = 0.018961 km/s
+Particle 274: v_circ = 0.022463 km/s
+Particle 275: v_circ = 0.385238 km/s
+Particle 276: v_circ = 0.161629 km/s
+Particle 277: v_circ = 0.054435 km/s
+Particle 278: v_circ = 0.235069 km/s
+Particle 279: v_circ = 0.561352 km/s
+Particle 280: v_circ = 0.095582 km/s
+Particle 281: v_circ = 0.147643 km/s
+Particle 282: v_circ = 0.059308 km/s
+Particle 283: v_circ = 0.054173 km/s
+Particle 284: v_circ = 0.062085 km/s
+Particle 285: v_circ = 0.029876 km/s
+Particle 286: v_circ = 0.031588 km/s
+Particle 287: v_circ = 0.078238 km/s
+Particle 288: v_circ = 0.005304 km/s
+Particle 289: v_circ = 0.079801 km/s
+Particle 290: v_circ = 0.085177 km/s
+Particle 291: v_circ = 0.039868 km/s
+Particle 292: v_circ = 0.249190 km/s
+Particle 293: v_circ = 0.005356 km/s
+Particle 294: v_circ = 0.316537 km/s
+Particle 295: v_circ = 0.118361 km/s
+Particle 296: v_circ = 0.134227 km/s
+Particle 297: v_circ = 0.193730 km/s
+Particle 298: v_circ = 0.021343 km/s
+Particle 299: v_circ = 0.166501 km/s
+Particle 300: v_circ = 0.018286 km/s
+Particle 301: v_circ = 0.029268 km/s
+Particle 302: v_circ = 0.174868 km/s
+Particle 303: v_circ = 0.008981 km/s
+Particle 304: v_circ = 0.067167 km/s
+Particle 305: v_circ = 0.157152 km/s
+Particle 306: v_circ = 0.358973 km/s
+Particle 307: v_circ = 0.023008 km/s
+Particle 308: v_circ = 0.035478 km/s
+Particle 309: v_circ = 0.121809 km/s
+Particle 310: v_circ = 0.015103 km/s
+Particle 311: v_circ = 0.009254 km/s
+Particle 312: v_circ = 0.043729 km/s
+Particle 313: v_circ = 0.042797 km/s
+Particle 314: v_circ = 0.020243 km/s
+Particle 315: v_circ = 0.051964 km/s
+Particle 316: v_circ = 0.341083 km/s
+Particle 317: v_circ = 0.244809 km/s
+Particle 318: v_circ = 0.291464 km/s
+Particle 319: v_circ = 0.064242 km/s
+Particle 320: v_circ = 0.049861 km/s
+Particle 321: v_circ = 0.059654 km/s
+Particle 322: v_circ = 0.134904 km/s
+Particle 323: v_circ = 0.080930 km/s
+Particle 324: v_circ = 0.090835 km/s
+Particle 325: v_circ = 0.151192 km/s
+Particle 326: v_circ = 0.111713 km/s
+Particle 327: v_circ = 0.204902 km/s
+Particle 328: v_circ = 0.025273 km/s
+Particle 329: v_circ = 0.269960 km/s
+Particle 330: v_circ = 0.073895 km/s
+Particle 331: v_circ = 0.164142 km/s
+Particle 332: v_circ = 0.113540 km/s
+Particle 333: v_circ = 0.177947 km/s
+Particle 334: v_circ = 0.080075 km/s
+Particle 335: v_circ = 0.028614 km/s
+Particle 336: v_circ = 0.189187 km/s
+Particle 337: v_circ = 0.305365 km/s
+Particle 338: v_circ = 0.032999 km/s
+Particle 339: v_circ = 0.356966 km/s
+Particle 340: v_circ = 0.172537 km/s
+Particle 341: v_circ = 0.185268 km/s
+Particle 342: v_circ = 0.019987 km/s
+Particle 343: v_circ = 0.246460 km/s
+Particle 344: v_circ = 0.194920 km/s
+Particle 345: v_circ = 0.047456 km/s
+Particle 346: v_circ = 0.040161 km/s
+Particle 347: v_circ = 0.044814 km/s
+Particle 348: v_circ = 0.013355 km/s
+Particle 349: v_circ = 0.036226 km/s
+Particle 350: v_circ = 0.054168 km/s
+Particle 351: v_circ = 0.169673 km/s
+Particle 352: v_circ = 0.062574 km/s
+Particle 353: v_circ = 0.203376 km/s
+Particle 354: v_circ = 0.085039 km/s
+Particle 355: v_circ = 0.097647 km/s
+Particle 356: v_circ = 0.040987 km/s
+Particle 357: v_circ = 0.106695 km/s
+Particle 358: v_circ = 0.025751 km/s
+Particle 359: v_circ = 0.007994 km/s
+Particle 360: v_circ = 0.093554 km/s
+Particle 361: v_circ = 0.078666 km/s
+Particle 362: v_circ = 0.115145 km/s
+Particle 363: v_circ = 0.023307 km/s
+Particle 364: v_circ = 0.193767 km/s
+Particle 365: v_circ = 0.041115 km/s
+Particle 366: v_circ = 0.029612 km/s
+Particle 367: v_circ = 0.078035 km/s
+Particle 368: v_circ = 0.092665 km/s
+Particle 369: v_circ = 0.187961 km/s
+Particle 370: v_circ = 0.159475 km/s
+Particle 371: v_circ = 0.022949 km/s
+Particle 372: v_circ = 0.028412 km/s
+Particle 373: v_circ = 0.026098 km/s
+Particle 374: v_circ = 0.225785 km/s
+Particle 375: v_circ = 0.035113 km/s
+Particle 376: v_circ = 0.011509 km/s
+Particle 377: v_circ = 0.033672 km/s
+Particle 378: v_circ = 0.028715 km/s
+Particle 379: v_circ = 0.099208 km/s
+Particle 380: v_circ = 0.023770 km/s
+Particle 381: v_circ = 0.061929 km/s
+Particle 382: v_circ = 0.036717 km/s
+Particle 383: v_circ = 0.074949 km/s
+Particle 384: v_circ = 0.017069 km/s
+Particle 385: v_circ = 0.069482 km/s
+Particle 386: v_circ = 0.029109 km/s
+Particle 387: v_circ = 0.224693 km/s
+Particle 388: v_circ = 0.016952 km/s
+Particle 389: v_circ = 0.046224 km/s
+Particle 390: v_circ = 0.065130 km/s
+Particle 391: v_circ = 0.029035 km/s
+Particle 392: v_circ = 0.089571 km/s
+Particle 393: v_circ = 0.017656 km/s
+Particle 394: v_circ = 0.079050 km/s
+Particle 395: v_circ = 0.042404 km/s
+Particle 396: v_circ = 0.112399 km/s
+Particle 397: v_circ = 0.110139 km/s
+Particle 398: v_circ = 0.025017 km/s
+Particle 399: v_circ = 0.025337 km/s
+Particle 400: v_circ = 0.030663 km/s
+Particle 401: v_circ = 0.352348 km/s
+Particle 402: v_circ = 0.055933 km/s
+Particle 403: v_circ = 0.068167 km/s
+Particle 404: v_circ = 0.034868 km/s
+Particle 405: v_circ = 0.057431 km/s
+Particle 406: v_circ = 0.075550 km/s
+Particle 407: v_circ = 0.144143 km/s
+Particle 408: v_circ = 0.240109 km/s
+Particle 409: v_circ = 0.178243 km/s
+Particle 410: v_circ = 0.161594 km/s
+Particle 411: v_circ = 0.070259 km/s
+Particle 412: v_circ = 0.017807 km/s
+Particle 413: v_circ = 0.037297 km/s
+Particle 414: v_circ = 0.072981 km/s
+Particle 415: v_circ = 0.094183 km/s
+Particle 416: v_circ = 0.013510 km/s
+Particle 417: v_circ = 0.014325 km/s
+Particle 418: v_circ = 0.173792 km/s
+Particle 419: v_circ = 0.048604 km/s
+Particle 420: v_circ = 0.090081 km/s
+Particle 421: v_circ = 0.013322 km/s
+Particle 422: v_circ = 0.025759 km/s
+Particle 423: v_circ = 0.061053 km/s
+Particle 424: v_circ = 0.139936 km/s
+Particle 425: v_circ = 0.082362 km/s
+Particle 426: v_circ = 0.046014 km/s
+Particle 427: v_circ = 0.150399 km/s
+Particle 428: v_circ = 0.084069 km/s
+Particle 429: v_circ = 0.173324 km/s
+Particle 430: v_circ = 0.100741 km/s
+Particle 431: v_circ = 0.018193 km/s
+Particle 432: v_circ = 0.094698 km/s
+Particle 433: v_circ = 0.095860 km/s
+Particle 434: v_circ = 0.170783 km/s
+Particle 435: v_circ = 0.211726 km/s
+Particle 436: v_circ = 0.032060 km/s
+Particle 437: v_circ = 0.232719 km/s
+Particle 438: v_circ = 0.036697 km/s
+Particle 439: v_circ = 0.020126 km/s
+Particle 440: v_circ = 0.172152 km/s
+Particle 441: v_circ = 0.170408 km/s
+Particle 442: v_circ = 0.408917 km/s
+Particle 443: v_circ = 0.014342 km/s
+Particle 444: v_circ = 0.212264 km/s
+Particle 445: v_circ = 0.016671 km/s
+Particle 446: v_circ = 0.038151 km/s
+Particle 447: v_circ = 0.111036 km/s
+Particle 448: v_circ = 0.138396 km/s
+Particle 449: v_circ = 0.036299 km/s
+Particle 450: v_circ = 0.041206 km/s
+Particle 451: v_circ = 0.051599 km/s
+Particle 452: v_circ = 0.241780 km/s
+Particle 453: v_circ = 0.123118 km/s
+Particle 454: v_circ = 0.046532 km/s
+Particle 455: v_circ = 0.197227 km/s
+Particle 456: v_circ = 0.036657 km/s
+Particle 457: v_circ = 0.140182 km/s
+Particle 458: v_circ = 0.052094 km/s
+Particle 459: v_circ = 0.066610 km/s
+Particle 460: v_circ = 0.038899 km/s
+Particle 461: v_circ = 0.040051 km/s
+Particle 462: v_circ = 0.124851 km/s
+Particle 463: v_circ = 0.038325 km/s
+Particle 464: v_circ = 0.031531 km/s
+Particle 465: v_circ = 0.029378 km/s
+Particle 466: v_circ = 0.017251 km/s
+Particle 467: v_circ = 0.061002 km/s
+Particle 468: v_circ = 0.058392 km/s
+Particle 469: v_circ = 0.071287 km/s
+Particle 470: v_circ = 0.011864 km/s
+Particle 471: v_circ = 0.103115 km/s
+Particle 472: v_circ = 0.210805 km/s
+Particle 473: v_circ = 0.056593 km/s
+Particle 474: v_circ = 0.109791 km/s
+Particle 475: v_circ = 0.026057 km/s
+Particle 476: v_circ = 0.017822 km/s
+Particle 477: v_circ = 0.017994 km/s
+Particle 478: v_circ = 0.144790 km/s
+Particle 479: v_circ = 0.020428 km/s
+Particle 480: v_circ = 0.204708 km/s
+Particle 481: v_circ = 0.025170 km/s
+Particle 482: v_circ = 0.218329 km/s
+Particle 483: v_circ = 0.064519 km/s
+Particle 484: v_circ = 0.169503 km/s
+Particle 485: v_circ = 0.071072 km/s
+Particle 486: v_circ = 0.107222 km/s
+Particle 487: v_circ = 0.067042 km/s
+Particle 488: v_circ = 0.035874 km/s
+Particle 489: v_circ = 0.048144 km/s
+Particle 490: v_circ = 0.036123 km/s
+Particle 491: v_circ = 0.400912 km/s
+Particle 492: v_circ = 0.059703 km/s
+Particle 493: v_circ = 0.052431 km/s
+Particle 494: v_circ = 0.276388 km/s
+Particle 495: v_circ = 0.085415 km/s
+Particle 496: v_circ = 0.234384 km/s
+Particle 497: v_circ = 0.056844 km/s
+Particle 498: v_circ = 0.022457 km/s
+Particle 499: v_circ = 0.064961 km/s
+Particle 500: v_circ = 0.049944 km/s
+Particle 501: v_circ = 0.424496 km/s
+Particle 502: v_circ = 0.005609 km/s
+Particle 503: v_circ = 0.184976 km/s
+Particle 504: v_circ = 0.052955 km/s
+Particle 505: v_circ = 0.070214 km/s
+Particle 506: v_circ = 0.019397 km/s
+Particle 507: v_circ = 0.075516 km/s
+Particle 508: v_circ = 0.082076 km/s
+Particle 509: v_circ = 0.057497 km/s
+Particle 510: v_circ = 0.027101 km/s
+Particle 511: v_circ = 0.141860 km/s
+Particle 512: v_circ = 0.304692 km/s
+Particle 513: v_circ = 0.074796 km/s
+Particle 514: v_circ = 0.022133 km/s
+Particle 515: v_circ = 0.051647 km/s
+Particle 516: v_circ = 0.011425 km/s
+Particle 517: v_circ = 0.015253 km/s
+Particle 518: v_circ = 0.135103 km/s
+Particle 519: v_circ = 0.017726 km/s
+Particle 520: v_circ = 0.013613 km/s
+Particle 521: v_circ = 0.011190 km/s
+Particle 522: v_circ = 0.030787 km/s
+Particle 523: v_circ = 0.040657 km/s
+Particle 524: v_circ = 0.141590 km/s
+Particle 525: v_circ = 0.025661 km/s
+Particle 526: v_circ = 0.056613 km/s
+Particle 527: v_circ = 0.033218 km/s
+Particle 528: v_circ = 0.072571 km/s
+Particle 529: v_circ = 0.084522 km/s
+Particle 530: v_circ = 0.089273 km/s
+Particle 531: v_circ = 0.122260 km/s
+Particle 532: v_circ = 0.086768 km/s
+Particle 533: v_circ = 0.061361 km/s
+Particle 534: v_circ = 0.067883 km/s
+Particle 535: v_circ = 0.511080 km/s
+Particle 536: v_circ = 0.032345 km/s
+Particle 537: v_circ = 0.034853 km/s
+Particle 538: v_circ = 0.097746 km/s
+Particle 539: v_circ = 0.095444 km/s
+Particle 540: v_circ = 0.321394 km/s
+Particle 541: v_circ = 0.129680 km/s
+Particle 542: v_circ = 0.023749 km/s
+Particle 543: v_circ = 0.074546 km/s
+Particle 544: v_circ = 0.083142 km/s
+Particle 545: v_circ = 0.076567 km/s
+Particle 546: v_circ = 0.179654 km/s
+Particle 547: v_circ = 0.185731 km/s
+Particle 548: v_circ = 0.097759 km/s
+Particle 549: v_circ = 0.079500 km/s
+Particle 550: v_circ = 0.020081 km/s
+Particle 551: v_circ = 0.211290 km/s
+Particle 552: v_circ = 0.112737 km/s
+Particle 553: v_circ = 0.041062 km/s
+Particle 554: v_circ = 0.110447 km/s
+Particle 555: v_circ = 0.206125 km/s
+Particle 556: v_circ = 0.059571 km/s
+Particle 557: v_circ = 0.120346 km/s
+Particle 558: v_circ = 0.186870 km/s
+Particle 559: v_circ = 0.034724 km/s
+Particle 560: v_circ = 0.026557 km/s
+Particle 561: v_circ = 0.013518 km/s
+Particle 562: v_circ = 0.160490 km/s
+Particle 563: v_circ = 0.029181 km/s
+Particle 564: v_circ = 0.403908 km/s
+Particle 565: v_circ = 0.039813 km/s
+Particle 566: v_circ = 0.112256 km/s
+Particle 567: v_circ = 0.266831 km/s
+Particle 568: v_circ = 0.270873 km/s
+Particle 569: v_circ = 0.127246 km/s
+Particle 570: v_circ = 0.019341 km/s
+Particle 571: v_circ = 0.111018 km/s
+Particle 572: v_circ = 0.171722 km/s
+Particle 573: v_circ = 0.132353 km/s
+Particle 574: v_circ = 0.021281 km/s
+Particle 575: v_circ = 0.020570 km/s
+Particle 576: v_circ = 0.031127 km/s
+Particle 577: v_circ = 0.016927 km/s
+Particle 578: v_circ = 0.274027 km/s
+Particle 579: v_circ = 0.136048 km/s
+Particle 580: v_circ = 0.308577 km/s
+Particle 581: v_circ = 0.036973 km/s
+Particle 582: v_circ = 0.029527 km/s
+Particle 583: v_circ = 0.090564 km/s
+Particle 584: v_circ = 0.116373 km/s
+Particle 585: v_circ = 0.053457 km/s
+Particle 586: v_circ = 0.126019 km/s
+Particle 587: v_circ = 0.058765 km/s
+Particle 588: v_circ = 0.007253 km/s
+Particle 589: v_circ = 0.101319 km/s
+Particle 590: v_circ = 0.040223 km/s
+Particle 591: v_circ = 0.022418 km/s
+Particle 592: v_circ = 0.143616 km/s
+Particle 593: v_circ = 0.052641 km/s
+Particle 594: v_circ = 0.349785 km/s
+Particle 595: v_circ = 0.023797 km/s
+Particle 596: v_circ = 0.206395 km/s
+Particle 597: v_circ = 0.090574 km/s
+Particle 598: v_circ = 0.021814 km/s
+Particle 599: v_circ = 0.347170 km/s
+Particle 600: v_circ = 0.298824 km/s
+Particle 601: v_circ = 0.152707 km/s
+Particle 602: v_circ = 0.043694 km/s
+Particle 603: v_circ = 0.130085 km/s
+Particle 604: v_circ = 0.020285 km/s
+Particle 605: v_circ = 0.186960 km/s
+Particle 606: v_circ = 0.235753 km/s
+Particle 607: v_circ = 0.025297 km/s
+Particle 608: v_circ = 0.246530 km/s
+Particle 609: v_circ = 0.038911 km/s
+Particle 610: v_circ = 0.034968 km/s
+Particle 611: v_circ = 0.100437 km/s
+Particle 612: v_circ = 0.173527 km/s
+Particle 613: v_circ = 0.272825 km/s
+Particle 614: v_circ = 0.055201 km/s
+Particle 615: v_circ = 0.008703 km/s
+Particle 616: v_circ = 0.044856 km/s
+Particle 617: v_circ = 0.097149 km/s
+Particle 618: v_circ = 0.051839 km/s
+Particle 619: v_circ = 0.027240 km/s
+Particle 620: v_circ = 0.137767 km/s
+Particle 621: v_circ = 0.033934 km/s
+Particle 622: v_circ = 0.004813 km/s
+Particle 623: v_circ = 0.023971 km/s
+Particle 624: v_circ = 0.236791 km/s
+Particle 625: v_circ = 0.666018 km/s
+Particle 626: v_circ = 0.398940 km/s
+Particle 627: v_circ = 0.028191 km/s
+Particle 628: v_circ = 0.223622 km/s
+Particle 629: v_circ = 0.005062 km/s
+Particle 630: v_circ = 0.051001 km/s
+Particle 631: v_circ = 0.058476 km/s
+Particle 632: v_circ = 0.020757 km/s
+Particle 633: v_circ = 0.016093 km/s
+Particle 634: v_circ = 0.051333 km/s
+Particle 635: v_circ = 0.061116 km/s
+Particle 636: v_circ = 0.061396 km/s
+Particle 637: v_circ = 0.188563 km/s
+Particle 638: v_circ = 0.270978 km/s
+Particle 639: v_circ = 0.026214 km/s
+Particle 640: v_circ = 0.327495 km/s
+Particle 641: v_circ = 0.023872 km/s
+Particle 642: v_circ = 0.049023 km/s
+Particle 643: v_circ = 0.184034 km/s
+Particle 644: v_circ = 0.056490 km/s
+Particle 645: v_circ = 0.067645 km/s
+Particle 646: v_circ = 0.036959 km/s
+Particle 647: v_circ = 0.125493 km/s
+Particle 648: v_circ = 0.398663 km/s
+Particle 649: v_circ = 0.047372 km/s
+Particle 650: v_circ = 0.044543 km/s
+Particle 651: v_circ = 0.011507 km/s
+Particle 652: v_circ = 0.190762 km/s
+Particle 653: v_circ = 0.028882 km/s
+Particle 654: v_circ = 0.050813 km/s
+Particle 655: v_circ = 0.021149 km/s
+Particle 656: v_circ = 0.209318 km/s
+Particle 657: v_circ = 0.034197 km/s
+Particle 658: v_circ = 0.387250 km/s
+Particle 659: v_circ = 0.042013 km/s
+Particle 660: v_circ = 0.048815 km/s
+Particle 661: v_circ = 0.203854 km/s
+Particle 662: v_circ = 0.085012 km/s
+Particle 663: v_circ = 0.310704 km/s
+Particle 664: v_circ = 0.059694 km/s
+Particle 665: v_circ = 0.010138 km/s
+Particle 666: v_circ = 0.037412 km/s
+Particle 667: v_circ = 0.038263 km/s
+Particle 668: v_circ = 0.062729 km/s
+Particle 669: v_circ = 0.096426 km/s
+Particle 670: v_circ = 0.230640 km/s
+Particle 671: v_circ = 0.081085 km/s
+Particle 672: v_circ = 0.338494 km/s
+Particle 673: v_circ = 0.024200 km/s
+Particle 674: v_circ = 0.022147 km/s
+Particle 675: v_circ = 0.091829 km/s
+Particle 676: v_circ = 0.053020 km/s
+Particle 677: v_circ = 0.099015 km/s
+Particle 678: v_circ = 0.112960 km/s
+Particle 679: v_circ = 0.121190 km/s
+Particle 680: v_circ = 0.042588 km/s
+Particle 681: v_circ = 0.100727 km/s
+Particle 682: v_circ = 0.341928 km/s
+Particle 683: v_circ = 0.152653 km/s
+Particle 684: v_circ = 0.090238 km/s
+Particle 685: v_circ = 0.085128 km/s
+Particle 686: v_circ = 0.097188 km/s
+Particle 687: v_circ = 0.036987 km/s
+Particle 688: v_circ = 0.013263 km/s
+Particle 689: v_circ = 0.097860 km/s
+Particle 690: v_circ = 0.038716 km/s
+Particle 691: v_circ = 0.236676 km/s
+Particle 692: v_circ = 0.100399 km/s
+Particle 693: v_circ = 0.211705 km/s
+Particle 694: v_circ = 0.105353 km/s
+Particle 695: v_circ = 0.023848 km/s
+Particle 696: v_circ = 0.082276 km/s
+Particle 697: v_circ = 0.021984 km/s
+Particle 698: v_circ = 0.346385 km/s
+Particle 699: v_circ = 0.063686 km/s
+Particle 700: v_circ = 0.077432 km/s
+Particle 701: v_circ = 0.014978 km/s
+Particle 702: v_circ = 0.232748 km/s
+Particle 703: v_circ = 0.023567 km/s
+Particle 704: v_circ = 0.179995 km/s
+Particle 705: v_circ = 0.007178 km/s
+Particle 706: v_circ = 0.215225 km/s
+Particle 707: v_circ = 0.028674 km/s
+Particle 708: v_circ = 0.058193 km/s
+Particle 709: v_circ = 0.022197 km/s
+Particle 710: v_circ = 0.250378 km/s
+Particle 711: v_circ = 0.013864 km/s
+Particle 712: v_circ = 0.113983 km/s
+Particle 713: v_circ = 0.010629 km/s
+Particle 714: v_circ = 0.343491 km/s
+Particle 715: v_circ = 0.048872 km/s
+Particle 716: v_circ = 0.032035 km/s
+Particle 717: v_circ = 0.160957 km/s
+Particle 718: v_circ = 0.091154 km/s
+Particle 719: v_circ = 0.029490 km/s
+Particle 720: v_circ = 0.007810 km/s
+Particle 721: v_circ = 0.061689 km/s
+Particle 722: v_circ = 0.022245 km/s
+Particle 723: v_circ = 0.042343 km/s
+Particle 724: v_circ = 0.045650 km/s
+Particle 725: v_circ = 0.018595 km/s
+Particle 726: v_circ = 0.646175 km/s
+Particle 727: v_circ = 0.078198 km/s
+Particle 728: v_circ = 0.051288 km/s
+Particle 729: v_circ = 0.064722 km/s
+Particle 730: v_circ = 0.141445 km/s
+Particle 731: v_circ = 0.022739 km/s
+Particle 732: v_circ = 0.038799 km/s
+Particle 733: v_circ = 0.110450 km/s
+Particle 734: v_circ = 1.623114 km/s
+Particle 735: v_circ = 0.077205 km/s
+Particle 736: v_circ = 0.021570 km/s
+Particle 737: v_circ = 0.097281 km/s
+Particle 738: v_circ = 0.035038 km/s
+Particle 739: v_circ = 0.033283 km/s
+Particle 740: v_circ = 0.140102 km/s
+Particle 741: v_circ = 0.251771 km/s
+Particle 742: v_circ = 0.200020 km/s
+Particle 743: v_circ = 0.022952 km/s
+Particle 744: v_circ = 0.240100 km/s
+Particle 745: v_circ = 0.250467 km/s
+Particle 746: v_circ = 0.035383 km/s
+Particle 747: v_circ = 0.082561 km/s
+Particle 748: v_circ = 0.164284 km/s
+Particle 749: v_circ = 0.221309 km/s
+Particle 750: v_circ = 0.067266 km/s
+Particle 751: v_circ = 0.031000 km/s
+Particle 752: v_circ = 0.024801 km/s
+Particle 753: v_circ = 0.010150 km/s
+Particle 754: v_circ = 0.425970 km/s
+Particle 755: v_circ = 0.365301 km/s
+Particle 756: v_circ = 0.019885 km/s
+Particle 757: v_circ = 0.071048 km/s
+Particle 758: v_circ = 0.148330 km/s
+Particle 759: v_circ = 0.499062 km/s
+Particle 760: v_circ = 0.253313 km/s
+Particle 761: v_circ = 0.177975 km/s
+Particle 762: v_circ = 0.142106 km/s
+Particle 763: v_circ = 0.055315 km/s
+Particle 764: v_circ = 0.024428 km/s
+Particle 765: v_circ = 0.054149 km/s
+Particle 766: v_circ = 0.014916 km/s
+Particle 767: v_circ = 0.064503 km/s
+Particle 768: v_circ = 0.016663 km/s
+Particle 769: v_circ = 0.113188 km/s
+Particle 770: v_circ = 0.046244 km/s
+Particle 771: v_circ = 0.018785 km/s
+Particle 772: v_circ = 0.012836 km/s
+Particle 773: v_circ = 0.096007 km/s
+Particle 774: v_circ = 0.107445 km/s
+Particle 775: v_circ = 0.069754 km/s
+Particle 776: v_circ = 0.014344 km/s
+Particle 777: v_circ = 0.076768 km/s
+Particle 778: v_circ = 0.368110 km/s
+Particle 779: v_circ = 0.226919 km/s
+Particle 780: v_circ = 0.029948 km/s
+Particle 781: v_circ = 0.182368 km/s
+Particle 782: v_circ = 0.150797 km/s
+Particle 783: v_circ = 0.025156 km/s
+Particle 784: v_circ = 0.107614 km/s
+Particle 785: v_circ = 0.007591 km/s
+Particle 786: v_circ = 0.318891 km/s
+Particle 787: v_circ = 0.043567 km/s
+Particle 788: v_circ = 0.034751 km/s
+Particle 789: v_circ = 0.124775 km/s
+Particle 790: v_circ = 0.201027 km/s
+Particle 791: v_circ = 0.060818 km/s
+Particle 792: v_circ = 0.154560 km/s
+Particle 793: v_circ = 0.062241 km/s
+Particle 794: v_circ = 0.067236 km/s
+Particle 795: v_circ = 0.185364 km/s
+Particle 796: v_circ = 0.117197 km/s
+Particle 797: v_circ = 0.031436 km/s
+Particle 798: v_circ = 0.231587 km/s
+Particle 799: v_circ = 0.055792 km/s
+Particle 800: v_circ = 0.019381 km/s
+Particle 801: v_circ = 0.119591 km/s
+Particle 802: v_circ = 0.114408 km/s
+Particle 803: v_circ = 0.029213 km/s
+Particle 804: v_circ = 0.043804 km/s
+Particle 805: v_circ = 0.057356 km/s
+Particle 806: v_circ = 0.087350 km/s
+Particle 807: v_circ = 0.097136 km/s
+Particle 808: v_circ = 0.009324 km/s
+Particle 809: v_circ = 0.048829 km/s
+Particle 810: v_circ = 0.238490 km/s
+Particle 811: v_circ = 0.065235 km/s
+Particle 812: v_circ = 0.223606 km/s
+Particle 813: v_circ = 0.074069 km/s
+Particle 814: v_circ = 0.315194 km/s
+Particle 815: v_circ = 0.028840 km/s
+Particle 816: v_circ = 0.387295 km/s
+Particle 817: v_circ = 0.633516 km/s
+Particle 818: v_circ = 0.043471 km/s
+Particle 819: v_circ = 0.089151 km/s
+Particle 820: v_circ = 0.010790 km/s
+Particle 821: v_circ = 0.005265 km/s
+Particle 822: v_circ = 0.061661 km/s
+Particle 823: v_circ = 0.099259 km/s
+Particle 824: v_circ = 0.319073 km/s
+Particle 825: v_circ = 0.115128 km/s
+Particle 826: v_circ = 0.022123 km/s
+Particle 827: v_circ = 0.037081 km/s
+Particle 828: v_circ = 0.140605 km/s
+Particle 829: v_circ = 0.014593 km/s
+Particle 830: v_circ = 0.032272 km/s
+Particle 831: v_circ = 0.008223 km/s
+Particle 832: v_circ = 0.034434 km/s
+Particle 833: v_circ = 0.092474 km/s
+Particle 834: v_circ = 0.519079 km/s
+Particle 835: v_circ = 0.093595 km/s
+Particle 836: v_circ = 0.446627 km/s
+Particle 837: v_circ = 0.093265 km/s
+Particle 838: v_circ = 0.110290 km/s
+Particle 839: v_circ = 0.052813 km/s
+Particle 840: v_circ = 0.123686 km/s
+Particle 841: v_circ = 0.553893 km/s
+Particle 842: v_circ = 0.132682 km/s
+Particle 843: v_circ = 0.043469 km/s
+Particle 844: v_circ = 0.331903 km/s
+Particle 845: v_circ = 0.024277 km/s
+Particle 846: v_circ = 0.033952 km/s
+Particle 847: v_circ = 0.021909 km/s
+Particle 848: v_circ = 0.030737 km/s
+Particle 849: v_circ = 0.029017 km/s
+Particle 850: v_circ = 0.043810 km/s
+Particle 851: v_circ = 0.031171 km/s
+Particle 852: v_circ = 0.107893 km/s
+Particle 853: v_circ = 0.033449 km/s
+Particle 854: v_circ = 0.033226 km/s
+Particle 855: v_circ = 0.745742 km/s
+Particle 856: v_circ = 0.022751 km/s
+Particle 857: v_circ = 0.010330 km/s
+Particle 858: v_circ = 0.105089 km/s
+Particle 859: v_circ = 0.035136 km/s
+Particle 860: v_circ = 0.267187 km/s
+Particle 861: v_circ = 0.022146 km/s
+Particle 862: v_circ = 0.094796 km/s
+Particle 863: v_circ = 0.198791 km/s
+Particle 864: v_circ = 0.055107 km/s
+Particle 865: v_circ = 0.078935 km/s
+Particle 866: v_circ = 0.094592 km/s
+Particle 867: v_circ = 0.024851 km/s
+Particle 868: v_circ = 0.083255 km/s
+Particle 869: v_circ = 0.029055 km/s
+Particle 870: v_circ = 0.140648 km/s
+Particle 871: v_circ = 0.013769 km/s
+Particle 872: v_circ = 0.125498 km/s
+Particle 873: v_circ = 0.106495 km/s
+Particle 874: v_circ = 0.081319 km/s
+Particle 875: v_circ = 0.287888 km/s
+Particle 876: v_circ = 0.195269 km/s
+Particle 877: v_circ = 0.041026 km/s
+Particle 878: v_circ = 0.193322 km/s
+Particle 879: v_circ = 0.081871 km/s
+Particle 880: v_circ = 0.464485 km/s
+Particle 881: v_circ = 0.050555 km/s
+Particle 882: v_circ = 0.038293 km/s
+Particle 883: v_circ = 0.100122 km/s
+Particle 884: v_circ = 0.056792 km/s
+Particle 885: v_circ = 0.105023 km/s
+Particle 886: v_circ = 0.084187 km/s
+Particle 887: v_circ = 0.029830 km/s
+Particle 888: v_circ = 0.029831 km/s
+Particle 889: v_circ = 0.135914 km/s
+Particle 890: v_circ = 0.132059 km/s
+Particle 891: v_circ = 0.079869 km/s
+Particle 892: v_circ = 0.024829 km/s
+Particle 893: v_circ = 0.012405 km/s
+Particle 894: v_circ = 0.278896 km/s
+Particle 895: v_circ = 0.039569 km/s
+Particle 896: v_circ = 0.056513 km/s
+Particle 897: v_circ = 0.292971 km/s
+Particle 898: v_circ = 0.032402 km/s
+Particle 899: v_circ = 0.245275 km/s
+Particle 900: v_circ = 0.080798 km/s
+Particle 901: v_circ = 0.057300 km/s
+Particle 902: v_circ = 0.042219 km/s
+Particle 903: v_circ = 0.192112 km/s
+Particle 904: v_circ = 0.069451 km/s
+Particle 905: v_circ = 0.049672 km/s
+Particle 906: v_circ = 0.083969 km/s
+Particle 907: v_circ = 0.097236 km/s
+Particle 908: v_circ = 0.050862 km/s
+Particle 909: v_circ = 0.135614 km/s
+Particle 910: v_circ = 0.111749 km/s
+Particle 911: v_circ = 0.795004 km/s
+Particle 912: v_circ = 0.044372 km/s
+Particle 913: v_circ = 0.016977 km/s
+Particle 914: v_circ = 0.046943 km/s
+Particle 915: v_circ = 0.143820 km/s
+Particle 916: v_circ = 0.122903 km/s
+Particle 917: v_circ = 0.232208 km/s
+Particle 918: v_circ = 0.011343 km/s
+Particle 919: v_circ = 0.024261 km/s
+Particle 920: v_circ = 0.159642 km/s
+Particle 921: v_circ = 0.018914 km/s
+Particle 922: v_circ = 0.108037 km/s
+Particle 923: v_circ = 0.062787 km/s
+Particle 924: v_circ = 0.028854 km/s
+Particle 925: v_circ = 0.050415 km/s
+Particle 926: v_circ = 0.031594 km/s
+Particle 927: v_circ = 0.128964 km/s
+Particle 928: v_circ = 0.063316 km/s
+Particle 929: v_circ = 0.159149 km/s
+Particle 930: v_circ = 0.097750 km/s
+Particle 931: v_circ = 0.057686 km/s
+Particle 932: v_circ = 0.083592 km/s
+Particle 933: v_circ = 0.006846 km/s
+Particle 934: v_circ = 0.019156 km/s
+Particle 935: v_circ = 0.031764 km/s
+Particle 936: v_circ = 0.020220 km/s
+Particle 937: v_circ = 0.333301 km/s
+Particle 938: v_circ = 0.691312 km/s
+Particle 939: v_circ = 0.051065 km/s
+Particle 940: v_circ = 0.017275 km/s
+Particle 941: v_circ = 0.012385 km/s
+Particle 942: v_circ = 0.111031 km/s
+Particle 943: v_circ = 0.008961 km/s
+Particle 944: v_circ = 0.161220 km/s
+Particle 945: v_circ = 0.018550 km/s
+Particle 946: v_circ = 0.212513 km/s
+Particle 947: v_circ = 0.049663 km/s
+Particle 948: v_circ = 0.026378 km/s
+Particle 949: v_circ = 0.017176 km/s
+Particle 950: v_circ = 0.010612 km/s
+Particle 951: v_circ = 0.064291 km/s
+Particle 952: v_circ = 0.040205 km/s
+Particle 953: v_circ = 0.380128 km/s
+Particle 954: v_circ = 0.146206 km/s
+Particle 955: v_circ = 0.011660 km/s
+Particle 956: v_circ = 0.039186 km/s
+Particle 957: v_circ = 0.102090 km/s
+Particle 958: v_circ = 0.115141 km/s
+Particle 959: v_circ = 0.091896 km/s
+Particle 960: v_circ = 0.019604 km/s
+Particle 961: v_circ = 0.086202 km/s
+Particle 962: v_circ = 0.132858 km/s
+Particle 963: v_circ = 0.065125 km/s
+Particle 964: v_circ = 0.022414 km/s
+Particle 965: v_circ = 0.027331 km/s
+Particle 966: v_circ = 0.032997 km/s
+Particle 967: v_circ = 0.251859 km/s
+Particle 968: v_circ = 0.010045 km/s
+Particle 969: v_circ = 0.070200 km/s
+Particle 970: v_circ = 0.168968 km/s
+Particle 971: v_circ = 0.077358 km/s
+Particle 972: v_circ = 0.207244 km/s
+Particle 973: v_circ = 0.134620 km/s
+Particle 974: v_circ = 0.063070 km/s
+Particle 975: v_circ = 0.113760 km/s
+Particle 976: v_circ = 0.046106 km/s
+Particle 977: v_circ = 0.052426 km/s
+Particle 978: v_circ = 0.038283 km/s
+Particle 979: v_circ = 0.578161 km/s
+Particle 980: v_circ = 0.330023 km/s
+Particle 981: v_circ = 0.032789 km/s
+Particle 982: v_circ = 0.038787 km/s
+Particle 983: v_circ = 0.051686 km/s
+Particle 984: v_circ = 0.040876 km/s
+Particle 985: v_circ = 0.025722 km/s
+Particle 986: v_circ = 0.281444 km/s
+Particle 987: v_circ = 0.030465 km/s
+Particle 988: v_circ = 0.017288 km/s
+Particle 989: v_circ = 0.024450 km/s
+Particle 990: v_circ = 0.094004 km/s
+Particle 991: v_circ = 0.376710 km/s
+Particle 992: v_circ = 0.035527 km/s
+Particle 993: v_circ = 0.026783 km/s
+Particle 994: v_circ = 0.072291 km/s
+Particle 995: v_circ = 0.042061 km/s
+Particle 996: v_circ = 0.105326 km/s
+Particle 997: v_circ = 0.008868 km/s
+Particle 998: v_circ = 0.487387 km/s
+Particle 999: v_circ = 0.048301 km/s
+Mean r: 0.001 kpc
+lambda_dB crossing time: 224.585 Myr
+Fastest beat period T_c: 0.895 Myr
+dt: 0.000 Gyr
+Number of time steps: 22347
+Ramp time: 0.000 Gyr, no_ramp_steps: 0
+Initialisation completed in 112.76 seconds
+[host mem] after initialisation: 4.8 GB now, 13.3 GB peak
+Ramp phase: 0 steps
+Total: 22347 steps
+completed rho_lms precomputation
+[host mem] after rho_lms precomputation: 5.6 GB now, 13.3 GB peak
+[dev mem] after rho_lms precomputation: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.57, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms precomputation: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.22, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 2.63, peak_bytes_reserved 0.00, peak_pool_bytes 4.00, pool_bytes 4.00
+First acceleration call (incl. compile) took 8.59 seconds
+[host mem] after first acceleration call: 5.2 GB now, 13.3 GB peak
+[dev mem] after first acceleration call: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after first acceleration call: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+Resuming from checkpoint: /gpfs/home/jd925/Adding_stellar_masses/Checkpoints/SegII/checkpoints_rcut1_m22_3000_r0_0.001_Lout_0.125_dt_2/checkpoint_step_15700.pkl
+Resumed from step 15700 / 22347
+Time step 15701 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 3.64 seconds
+[dev mem] after rho_lms build, step 15700: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15700: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 5.82 seconds
+Time step 15702 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.21 seconds
+[dev mem] after rho_lms build, step 15701: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15701: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15703 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15702: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15702: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.36 seconds
+Time step 15704 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15703: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15703: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15705 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15704: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15704: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15706 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15705: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15705: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15707 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15706: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15706: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15708 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.18 seconds
+[dev mem] after rho_lms build, step 15707: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15707: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15709 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15708: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15708: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15710 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15709: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15709: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.38 seconds
+Time step 15711 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.21 seconds
+[dev mem] after rho_lms build, step 15710: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15710: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15712 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15711: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15711: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15713 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15712: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15712: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15714 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15713: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15713: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15715 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15714: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15714: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15716 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15715: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15715: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15717 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15716: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15716: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15718 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15717: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15717: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15719 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15718: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15718: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15720 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15719: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15719: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.40 seconds
+Time step 15721 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15720: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15720: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15722 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.18 seconds
+[dev mem] after rho_lms build, step 15721: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15721: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15723 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15722: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15722: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15724 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15723: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15723: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15725 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.18 seconds
+[dev mem] after rho_lms build, step 15724: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15724: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15726 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15725: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15725: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15727 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.18 seconds
+[dev mem] after rho_lms build, step 15726: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15726: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.33 seconds
+Time step 15728 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.18 seconds
+[dev mem] after rho_lms build, step 15727: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15727: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15729 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15728: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15728: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15730 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15729: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15729: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.39 seconds
+Time step 15731 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.22 seconds
+[dev mem] after rho_lms build, step 15730: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15730: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15732 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15731: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15731: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15733 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15732: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15732: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15734 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15733: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15733: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15735 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.18 seconds
+[dev mem] after rho_lms build, step 15734: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15734: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15736 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.18 seconds
+[dev mem] after rho_lms build, step 15735: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15735: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15737 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.18 seconds
+[dev mem] after rho_lms build, step 15736: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15736: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15738 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15737: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15737: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15739 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15738: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15738: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15740 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15739: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15739: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.39 seconds
+Time step 15741 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15740: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15740: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15742 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15741: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15741: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.36 seconds
+Time step 15743 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.20 seconds
+[dev mem] after rho_lms build, step 15742: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15742: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.34 seconds
+Time step 15744 / 22347
+Building rho_lms for this timestep...
+rho_lms built in 1.19 seconds
+[dev mem] after rho_lms build, step 15743: 0 (GiB) bytes_in_use 4.76, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.73, peak_bytes_reserved 0.00, peak_pool_bytes 8.01, pool_bytes 8.01
+[dev mem] after rho_lms build, step 15743: 1 (GiB) bytes_in_use 1.82, bytes_limit 59.44, bytes_reserved 0.00, largest_alloc_size 1.47, largest_free_block_bytes 0.00, num_allocs 0.00, peak_bytes_in_use 5.76, peak_bytes_reserved 0.00, peak_pool_bytes 8.00, pool_bytes 8.00
+  Force calls this timestep: 1
+Time stepping all particles completed in 2.35 seconds
+Time step 15745 / 22347
+Building rho_lms for this timestep...

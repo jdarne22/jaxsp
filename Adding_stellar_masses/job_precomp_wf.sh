@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N Precomp
+#PBS -N Precomp_seg
 #PBS -l select=1:ncpus=1:mem=256gb:ngpus=1:gpu_type=A100
 #PBS -l walltime=24:00:00
 #PBS -o /gpfs/home/jd925/Adding_stellar_masses/logs/job_precomp_output.log
@@ -21,4 +21,4 @@ export XLA_PYTHON_CLIENT_ALLOCATOR=cuda_async
 export TF_GPU_ALLOCATOR=cuda_malloc_async
 
 
-python -u $WORKDIR/Generating_m22_functions.py 2>&1 | tee $WORKDIR/logs/live_precomp_output.log
+python -u $WORKDIR/Generating_m22_functions_SegII.py 2>&1 | tee $WORKDIR/logs/live_precomp_output.log

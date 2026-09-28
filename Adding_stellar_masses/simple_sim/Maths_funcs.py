@@ -15,7 +15,7 @@ def Cartesian_to_sph_vel(x, y, z, vx, vy, vz):
     phi = jnp.arctan2(y, x)
 
     vr = (x * vx + y * vy + z * vz) / r
-    vtheta = (z * (x * vx + y * vy) - r**2 * vz) / (r * jnp.sqrt(x**2 + y**2))
+    vtheta = (z * (x * vx + y * vy) - (x**2 + y**2) * vz) / (r * jnp.sqrt(x**2 + y**2))
     vphi = (x * vy - y * vx) / (x**2 + y**2)**0.5
 
 
@@ -43,7 +43,7 @@ def Cartesian_to_sph_vel_np(x, y, z, vx, vy, vz):
     r = np.sqrt(x*x + y*y + z*z)
     rho_xy = np.sqrt(x*x + y*y)
     vr = (x*vx + y*vy + z*vz) / r
-    vtheta = (z*(x*vx + y*vy) - r*r*vz) / (r * rho_xy)
+    vtheta = (z*(x*vx + y*vy) - (x**2 + y**2) * vz) / (r * rho_xy)
     vphi = (x*vy - y*vx) / rho_xy
     return vr, vtheta, vphi
 

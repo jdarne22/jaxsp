@@ -28,7 +28,7 @@ class Rho_lm_Builder:
         self.sharding = sharding
 
         # ---- run modes ----
-        # frozen : hold the wavefunction at t = dt, so every timestep sees
+        # frozen : hold the wavefunction at t = 0, so every timestep sees
         #          the same rho (no phase evolution of the eigenmodes).
         # sph_sym: keep only the (l=0, m=0) coefficient of rho, giving a
         #          spherically symmetric density.
@@ -235,27 +235,66 @@ class Rho_lm_Builder:
         else:
             return 1.0
 
+    def initial_ramp_frac(self):
+        """
+        ramp_frac at step 0, worked out from ramp_time alone.
+
+        ramp_frac_for_step can't be used here: n_ramp_steps is
+        int(ramp_time / dt), set only once Number_of_ramp_steps() has run,
+        and that needs dt - which needs the velocities that
+        initial_rho_monopole() is called to produce. ramp_time is known from
+        __init__, and it is all that is needed to tell the two cases apart:
+
+          ramp_time == 0 -> no ramp, so the full realised field from the
+                            first step. Exactly the 1.0 the run will use.
+          ramp_time  > 0 -> the ramp starts at the static background and
+                            blends the realised field in over n_ramp_steps.
+                            The run's step 0 is 1/n_ramp_steps of the way in;
+                            0.0 here drops that single term, which for any
+                            ramp longer than a couple of steps is orders of
+                            magnitude below the difference between the two
+                            densities the ramp exists to bridge.
+        """
+        return 1.0 if not self.ramp_time else 0.0
+
     def phase_for_step(self, time_step):
         """
         e^{-i E_j t}: how far each radial mode's wavefunction has rotated in
         phase by this timestep. Stays in complex128 - small phase errors here
         compound badly over a long simulation.
 
-        frozen pins t at dt, so the wavefunction - and hence rho - is the same
-        at every step.
+        frozen pins t at 0, so the wavefunction - and hence rho - is the same
+        at every step, and is the same field a live run starts from.
+
+        t = 0 rather than the t = dt this used to freeze at. One instant is
+        as good as another for a frozen field, but t = 0 is the only one that
+        can be evaluated before set_dt() has run - and initial_rho_monopole()
+        has to run before it, because set_dt() reads the particle velocities
+        that are sampled from it.
         """
-        dt = self.sim_init.dt
-        t = dt if self.frozen else time_step * dt
+        # time_step == 0 is spelled out rather than left to 0 * dt: this runs
+        # once before set_dt(), from initial_rho_monopole, and sim_init.dt
+        # does not exist yet at that point.
+        if self.frozen or time_step == 0:
+            t = 0.0
+        else:
+            t = time_step * self.sim_init.dt
         return jnp.exp(-1j * self.eigen_energies * t)
 
-    def build_rho_lms_for_timestep(self, time_step):
+    def build_rho_lms_for_timestep(self, time_step, ramp_frac=None):
         """
         Builds rho_lm(r) at this timestep:
 
             rho = (1 - ramp_frac) * rho_static + ramp_frac * rho_full(t)
+
+        ramp_frac is read off the ramp schedule unless one is passed in.
+        initial_rho_monopole passes its own, because the schedule is not
+        known yet when the initial conditions are built - see
+        initial_ramp_frac.
         """
         phase = self.phase_for_step(time_step)
-        ramp_frac = self.ramp_frac_for_step(time_step)
+        if ramp_frac is None:
+            ramp_frac = self.ramp_frac_for_step(time_step)
 
         # Stashed so Phi_lm_Builder / Acceleration_Calculator can read the
         # same phase and ramp fraction for every force sub-step of this macro
@@ -275,6 +314,46 @@ class Rho_lm_Builder:
             out_sharding=self.sharding.shard_l,
             sph_sym=self.sph_sym,
         )
+
+    def initial_rho_monopole(self):
+        """
+        The spherically averaged density the particles actually feel at step
+        0: the (l=0, m=0) coefficient of build_rho_lms_for_timestep(0), times
+        Y_00. This is what the initial conditions have to be built from.
+
+        Not compute_diagonal_rho_expansion(). That returns the *time-averaged*
+        density, sum_j |a_j|^2 |R_j|^2, which is the ensemble mean of the
+        realised wavefunction's monopole, not the realisation itself: the two
+        differ by the interference terms between eigenmodes. In the soliton
+        core, where a handful of l = 0 modes carry most of the mass, that
+        difference reaches ~60% in the enclosed mass, and in a frozen run it
+        never averages away. Inverting Eddington in the time-averaged
+        potential and then integrating in the realised one left the stars
+        ~35% short in sigma^2 inside the core - they fell in ~13% and
+        phase-mixed over the first few orbits.
+
+        The (n_radii, L_out, 2*L_out - 1) array this builds is the single
+        largest allocation in the run, so only the monopole column is kept
+        and the rest is dropped here. run_simulation rebuilds it for step 0
+        immediately afterwards; build_rho_lms_for_timestep is a pure function
+        of the mode library and the ramp, so the rebuild is identical to this
+        one, and holding it across Phi_lm_Builder.initialise() instead would
+        push the peak the wrong way at m22 = 100.
+        """
+        rho_lms = self.build_rho_lms_for_timestep(0, ramp_frac=self.initial_ramp_frac())
+
+        # rho_lm is indexed [radius, l, m + (L_out - 1)], so the monopole is
+        # column L_out - 1 of row l = 0. sph_sym zeroes every other
+        # coefficient but leaves this one untouched, and the ramp blend has
+        # already been applied to it, so this is the step-0 density whichever
+        # mode the run is in.
+        L_out = int(self.sim_init.L_max_out)
+        rho_00 = rho_lms[:, 0, L_out - 1]
+        del rho_lms
+
+        # rho(r) = sum_lm rho_lm Y_lm, and Y_00 = 1 / sqrt(4 pi). Real by
+        # construction - rho is a real field - up to rounding in complex64.
+        return (rho_00 / jnp.sqrt(4.0 * jnp.pi)).real.astype(jnp.float64)
 
     def R_j_at_radii(self, radii, eigenmode_params=None):
         """
